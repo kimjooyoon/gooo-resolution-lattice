@@ -39,6 +39,9 @@ jobs:
           before=$(git status --porcelain=v1 -z --untracked-files=all | sha256sum | awk '{print $1}')
           gofmt_files=$(gofmt -l cmd internal)
           echo "gofmt files: ${gofmt_files:-none}"
+          if test -n "$gofmt_files"; then
+            gofmt -d cmd internal
+          fi
           test -z "$gofmt_files"
           go vet ./...
           test_start=$(date +%s%N)
