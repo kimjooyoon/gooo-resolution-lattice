@@ -41,6 +41,13 @@ jobs:
           echo "gofmt files: ${gofmt_files:-none}"
           if test -n "$gofmt_files"; then
             gofmt -d cmd internal
+            mkdir -p "$RUNNER_TEMP/formatted-source"
+            while IFS= read -r file; do
+              test -n "$file" || continue
+              gofmt -w "$file"
+              mkdir -p "$RUNNER_TEMP/formatted-source/$(dirname "$file")"
+              cp "$file" "$RUNNER_TEMP/formatted-source/$file"
+            done <<< "$gofmt_files"
           fi
           test -z "$gofmt_files"
           go vet ./...
@@ -147,6 +154,14 @@ jobs:
           name: gooo-resolution-lattice-evidence-${{ github.run_id }}
           path: ${{ runner.temp }}/lattice-artifact
           if-no-files-found: error
+
+      - name: Upload formatter output for repair
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gooo-resolution-lattice-formatted-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/formatted-source
+          if-no-files-found: ignore
 
       - name: Record artifact identity
         shell: bash
