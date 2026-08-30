@@ -1,0 +1,25 @@
+package resolutionlattice
+namespace resolutionlattice
+
+entity ClaimInput id "gooo://resolution-lattice/entity/claim-input"
+entity ResolutionClaim id "gooo://resolution-lattice/entity/resolution-claim"
+entity ClaimHistory id "gooo://resolution-lattice/entity/claim-history"
+entity DescentEdge id "gooo://resolution-lattice/entity/descent-edge"
+entity GeneratedReceipt id "gooo://resolution-lattice/entity/generated-receipt"
+entity CausalFrontier id "gooo://resolution-lattice/entity/causal-frontier"
+entity RuntimeEnvelope id "gooo://resolution-lattice/entity/runtime-envelope"
+entity ImprovementClaim id "gooo://resolution-lattice/entity/improvement-claim"
+entity LatticeDecision id "gooo://resolution-lattice/entity/lattice-decision"
+
+activity ResolveExactClaim(ClaimInput) -> ResolutionClaim
+activity PreserveClaimHistory(ResolutionClaim) -> ClaimHistory
+activity DescendExactToInvariant(ResolutionClaim) -> DescentEdge
+activity DescendInvariantToExistence(ResolutionClaim) -> DescentEdge
+activity DischargeSupportedClaim(ResolutionClaim) -> ClaimHistory
+activity PreserveUnknownTuple(ResolutionClaim) -> ClaimHistory
+activity RefuteContradiction(ResolutionClaim) -> ClaimHistory
+activity EnforceStatePrecedence(ClaimHistory) -> LatticeDecision
+activity BindGeneratedReceipt(DescentEdge) -> GeneratedReceipt
+activity EmitMinimalCausalFrontier(DescentEdge) -> CausalFrontier
+activity ObserveReadOnlyRuntime(ClaimInput) -> RuntimeEnvelope
+activity RequireExactImprovementPair(ClaimInput) -> ImprovementClaim

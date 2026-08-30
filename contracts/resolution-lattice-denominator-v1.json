@@ -1,0 +1,30 @@
+{
+  "schema": "gooo/resolution-lattice-denominator/v1",
+  "denominator_id": "gooo.denominator.resolution-lattice.v1",
+  "candidate_id": "gooo.product.resolution-lattice.v1",
+  "total": 12,
+  "proofs": [
+    {"choice": "FOUNDATION", "total": 4},
+    {"choice": "COHERENCE", "total": 4},
+    {"choice": "REGRESSION", "total": 4}
+  ],
+  "indicator_classes": [
+    {"class": "DRIVER", "total": 4},
+    {"class": "OUTCOME", "total": 4},
+    {"class": "GUARDRAIL", "total": 4}
+  ],
+  "cells": [
+    {"ordinal": 1, "id": "EXACT_CLAIM_OPENED", "activity": "ResolveExactClaim", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "metric_id": "gooo.metric.lattice.exact-open.v1", "metric_path": "history.exact.open", "artifact": "cases/normal.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 2, "id": "CLAIM_HISTORY_PRESERVED", "activity": "PreserveClaimHistory", "proof_choice": "FOUNDATION", "indicator_class": "GUARDRAIL", "metric_id": "gooo.metric.lattice.history.v1", "metric_path": "history", "artifact": "cases/normal.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 3, "id": "EXACT_TO_INVARIANT_DESCENT", "activity": "DescendExactToInvariant", "proof_choice": "FOUNDATION", "indicator_class": "OUTCOME", "metric_id": "gooo.metric.lattice.exact-invariant.v1", "metric_path": "edges.exact_to_invariant", "artifact": "receipts/normal.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 4, "id": "INVARIANT_TO_EXISTENCE_DESCENT", "activity": "DescendInvariantToExistence", "proof_choice": "FOUNDATION", "indicator_class": "DRIVER", "metric_id": "gooo.metric.lattice.invariant-existence.v1", "metric_path": "edges.invariant_to_existence", "artifact": "receipts/normal.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 5, "id": "SUPPORTED_CLAIM_DISCHARGED", "activity": "DischargeSupportedClaim", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "metric_id": "gooo.metric.lattice.discharge.v1", "metric_path": "history.discharged", "artifact": "cases/normal.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 6, "id": "UNKNOWN_TUPLE_PRESERVED", "activity": "PreserveUnknownTuple", "proof_choice": "COHERENCE", "indicator_class": "GUARDRAIL", "metric_id": "gooo.metric.lattice.unknown-tuple.v1", "metric_path": "cases/unknown.json", "artifact": "cases/unknown.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 7, "id": "CONTRADICTION_REFUTED", "activity": "RefuteContradiction", "proof_choice": "COHERENCE", "indicator_class": "OUTCOME", "metric_id": "gooo.metric.lattice.refuted.v1", "metric_path": "cases/refuted.json", "artifact": "cases/refuted.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 8, "id": "STATE_PRECEDENCE_ENFORCED", "activity": "EnforceStatePrecedence", "proof_choice": "COHERENCE", "indicator_class": "DRIVER", "metric_id": "gooo.metric.lattice.precedence.v1", "metric_path": "summary.precedence", "artifact": "ci-report.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 9, "id": "EDGE_RECEIPTS_BOUND", "activity": "BindGeneratedReceipt", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "metric_id": "gooo.metric.lattice.receipt-binding.v1", "metric_path": "edges.receipt", "artifact": "receipts/normal.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 10, "id": "MINIMAL_FRONTIER_EMITTED", "activity": "EmitMinimalCausalFrontier", "proof_choice": "REGRESSION", "indicator_class": "OUTCOME", "metric_id": "gooo.metric.lattice.frontier.v1", "metric_path": "edges.causal_frontier", "artifact": "receipts/normal.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 11, "id": "READ_ONLY_RUNTIME_OBSERVED", "activity": "ObserveReadOnlyRuntime", "proof_choice": "REGRESSION", "indicator_class": "DRIVER", "metric_id": "gooo.metric.lattice.read-only.v1", "metric_path": "runtime.repository_writes", "artifact": "runtime.json", "evaluator": "scripts/evaluate.sh"},
+    {"ordinal": 12, "id": "EXACT_IMPROVEMENT_PAIR_REQUIRED", "activity": "RequireExactImprovementPair", "proof_choice": "REGRESSION", "indicator_class": "GUARDRAIL", "metric_id": "gooo.metric.lattice.improvement-pair.v1", "metric_path": "improvement", "artifact": "cases/improvement-unknown.json", "evaluator": "scripts/evaluate.sh"}
+  ]
+}

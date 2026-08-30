@@ -1,0 +1,20 @@
+{
+  "schema": "gooo/resolution-lattice/input/v1",
+  "case_id": "normal",
+  "subject": "claim://order/42",
+  "start_resolution": "EXACT",
+  "evidence": {
+    "EXACT": {"status": "SUPPORTS", "observed": "order-42=paid", "digest": "exact-order-42-paid"},
+    "INVARIANT": {"status": "SUPPORTS", "observed": "paid orders have receipt", "digest": "invariant-paid-receipt"},
+    "EXISTENCE": {"status": "SUPPORTS", "observed": "receipt-42 exists", "digest": "existence-receipt-42"}
+  },
+  "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 0, "requested_privilege_escalation": false},
+  "improvement": {
+    "input_digest": "input-order-42",
+    "tool_digest": "tool-resolution-lattice-v1",
+    "contract_digest": "contract-resolution-lattice-v1",
+    "exact_before": {"value": "latency=100", "digest": "before-exact"},
+    "exact_after": {"value": "latency=80", "digest": "after-exact"},
+    "utility_evidence": true
+  }
+}

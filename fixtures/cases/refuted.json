@@ -1,0 +1,12 @@
+{
+  "schema": "gooo/resolution-lattice/input/v1",
+  "case_id": "refuted",
+  "subject": "claim://order/13",
+  "start_resolution": "EXACT",
+  "evidence": {
+    "EXACT": {"status": "CONTRADICTS", "observed": "order-13=cancelled", "digest": "exact-order-13-cancelled"},
+    "INVARIANT": {"status": "SUPPORTS", "observed": "paid orders have receipt", "digest": "invariant-paid-receipt"},
+    "EXISTENCE": {"status": "SUPPORTS", "observed": "receipt-13 exists", "digest": "existence-receipt-13"}
+  },
+  "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 0, "requested_privilege_escalation": false}
+}

@@ -1,0 +1,20 @@
+{
+  "schema": "gooo/resolution-lattice/input/v1",
+  "case_id": "improvement-unknown",
+  "subject": "claim://metric/utility",
+  "start_resolution": "EXACT",
+  "evidence": {
+    "EXACT": {"status": "SUPPORTS", "observed": "metric=better", "digest": "metric-exact"},
+    "INVARIANT": {"status": "SUPPORTS", "observed": "metric remains valid", "digest": "metric-invariant"},
+    "EXISTENCE": {"status": "SUPPORTS", "observed": "metric exists", "digest": "metric-existence"}
+  },
+  "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 0, "requested_privilege_escalation": false},
+  "improvement": {
+    "input_digest": "input-metric-utility",
+    "tool_digest": "tool-resolution-lattice-v1",
+    "contract_digest": "contract-resolution-lattice-v1",
+    "exact_before": null,
+    "exact_after": null,
+    "utility_evidence": true
+  }
+}
