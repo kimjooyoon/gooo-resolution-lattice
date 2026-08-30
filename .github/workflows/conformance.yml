@@ -34,9 +34,12 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          echo "Go version: $(go env GOVERSION)"
           test "$(go env GOVERSION)" = "go1.27.0"
           before=$(git status --porcelain=v1 -z --untracked-files=all | sha256sum | awk '{print $1}')
-          test -z "$(gofmt -l cmd internal)"
+          gofmt_files=$(gofmt -l cmd internal)
+          echo "gofmt files: ${gofmt_files:-none}"
+          test -z "$gofmt_files"
           go vet ./...
           test_start=$(date +%s%N)
           go test -json ./... > "$RUNNER_TEMP/go-test.json"
