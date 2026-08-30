@@ -61,8 +61,8 @@ func TestResolveRefutedTakesPrecedence(t *testing.T) {
 
 func TestResolveRejectsMalformedFixedPointAndAuthorityEscalation(t *testing.T) {
 	cases := []struct {
-		name  string
-		input string
+		name   string
+		input  string
 		reason string
 	}{
 		{name: "malformed", input: "{", reason: "MALFORMED_INPUT"},
@@ -89,7 +89,7 @@ func TestCanonicalDigestIgnoresJSONWhitespace(t *testing.T) {
 
 func testMeta() Meta {
 	bindings := map[string]Binding{
-		"DescendExactToInvariant": {Activity: "DescendExactToInvariant", SourcePath: "main.gooo", IRNode: "ir-exact-invariant", Evaluator: "scripts/evaluate.sh"},
+		"DescendExactToInvariant":     {Activity: "DescendExactToInvariant", SourcePath: "main.gooo", IRNode: "ir-exact-invariant", Evaluator: "scripts/evaluate.sh"},
 		"DescendInvariantToExistence": {Activity: "DescendInvariantToExistence", SourcePath: "main.gooo", IRNode: "ir-invariant-existence", Evaluator: "scripts/evaluate.sh"},
 	}
 	return Meta{SourcePath: "main.gooo", SourceDigest: "sha256:source", ContractDigest: "sha256:contract", ToolDigest: ToolDigest, Bindings: bindings}

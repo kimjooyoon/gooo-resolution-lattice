@@ -113,8 +113,8 @@ func resolve(args []string, stdout, stderr io.Writer) int {
 		receipts = append(receipts, edge.Receipt)
 	}
 	receiptBundle := struct {
-		Schema   string                      `json:"schema"`
-		CaseID   string                      `json:"case_id"`
+		Schema   string                     `json:"schema"`
+		CaseID   string                     `json:"case_id"`
 		Receipts []lattice.GeneratedReceipt `json:"receipts"`
 	}{
 		Schema:   "gooo/resolution-lattice/receipts/v1",

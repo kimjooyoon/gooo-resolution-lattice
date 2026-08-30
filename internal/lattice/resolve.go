@@ -34,10 +34,10 @@ func ResolveJSON(raw []byte, meta Meta) Report {
 		return failClosed(report, "INPUT", "VALIDATE_INPUT", err.Error(), "REPAIR_INPUT", "input-contract")
 	}
 	report.Authority = AuthorityReport{
-		ObservationMode:      input.Authority.ObservationMode,
-		RepositoryWrites:     0,
+		ObservationMode:       input.Authority.ObservationMode,
+		RepositoryWrites:      0,
 		InputRepositoryWrites: input.Authority.RequestedRepositoryWrites,
-		ReadOnly:             true,
+		ReadOnly:              true,
 	}
 	if input.Authority.RequestedRepositoryWrites != 0 || input.Authority.RequestedPrivilegeEscalation {
 		return failClosed(report, "AUTHORITY", "VALIDATE_READ_ONLY_BOUNDARY", "AUTHORITY_ESCALATION_REFUTED", "USE_READ_ONLY_AUTHORITY", "authority-boundary")
@@ -175,17 +175,17 @@ func validateInput(input Input) error {
 
 func baseReport(meta Meta, inputDigest string) Report {
 	return Report{
-		Schema:         Schema,
-		Decision:       "FAIL_CLOSED",
-		InputDigest:    inputDigest,
-		ToolDigest:     meta.ToolDigest,
-		ContractDigest: meta.ContractDigest,
-		State:          StateRefuted,
-		Precedence:     []string{StateRefuted, StateUnknown, StateClosed},
-		Claims:         []Claim{},
-		History:        []HistoryEvent{},
-		Edges:          []DescentEdge{},
-		CausalFrontier: []string{},
+		Schema:             Schema,
+		Decision:           "FAIL_CLOSED",
+		InputDigest:        inputDigest,
+		ToolDigest:         meta.ToolDigest,
+		ContractDigest:     meta.ContractDigest,
+		State:              StateRefuted,
+		Precedence:         []string{StateRefuted, StateUnknown, StateClosed},
+		Claims:             []Claim{},
+		History:            []HistoryEvent{},
+		Edges:              []DescentEdge{},
+		CausalFrontier:     []string{},
 		GeneratedArtifacts: []string{"report.json", "receipts.json"},
 		Authority: AuthorityReport{
 			ObservationMode: "UNKNOWN",
