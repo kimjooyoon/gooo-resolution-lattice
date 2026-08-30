@@ -1,0 +1,12 @@
+{
+  "schema": "gooo/resolution-lattice/input/v1",
+  "case_id": "privilege-escalation",
+  "subject": "claim://authority/1",
+  "start_resolution": "EXACT",
+  "evidence": {
+    "EXACT": {"status": "SUPPORTS", "observed": "authority request", "digest": "authority"},
+    "INVARIANT": {"status": "SUPPORTS", "observed": "authority invariant", "digest": "authority"},
+    "EXISTENCE": {"status": "SUPPORTS", "observed": "authority exists", "digest": "authority"}
+  },
+  "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 1, "requested_privilege_escalation": true}
+}
