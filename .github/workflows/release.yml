@@ -3,6 +3,16 @@ name: Immutable resolution lattice release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing annotated release tag to publish'
+        required: true
+        type: string
+      release_commit:
+        description: 'Commit peeled from the annotated release tag'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -17,13 +27,18 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_commit || github.sha }}
 
       - name: Verify annotated immutable tag
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git cat-file -t "$GITHUB_REF_NAME^{tag}")" = tag
-          test "$(git rev-parse "$GITHUB_REF_NAME^{}")" = "$GITHUB_SHA"
+          release_tag="${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          release_commit="${{ github.event_name == 'workflow_dispatch' && inputs.release_commit || github.sha }}"
+          test "$(git cat-file -t "$release_tag")" = tag
+          test "$(git rev-parse "$release_tag^{}")" = "$release_commit"
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
+          echo "RELEASE_COMMIT=$release_commit" >> "$GITHUB_ENV"
 
       - name: Install Go 1.27
         uses: actions/setup-go@v6
@@ -35,12 +50,12 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          archive="gooo-resolution-lattice-${GITHUB_REF_NAME#v}.tar.gz"
-          git archive --format=tar.gz --prefix="gooo-resolution-lattice-${GITHUB_REF_NAME#v}/" -o "$archive" "$GITHUB_SHA"
+          archive="gooo-resolution-lattice-${RELEASE_TAG#v}.tar.gz"
+          git archive --format=tar.gz --prefix="gooo-resolution-lattice-${RELEASE_TAG#v}/" -o "$archive" "$RELEASE_COMMIT"
           sha256sum "$archive" > SHA256SUMS
           jq -S -n \
-            --arg tag "$GITHUB_REF_NAME" \
-            --arg commit "$GITHUB_SHA" \
+            --arg tag "$RELEASE_TAG" \
+            --arg commit "$RELEASE_COMMIT" \
             --arg go_version "$(go env GOVERSION)" \
             '{schema:"gooo/resolution-lattice/release-manifest/v1",tag:$tag,commit:$commit,go_version:$go_version,immutable:true}' \
             > release-manifest.json
@@ -51,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          archive="gooo-resolution-lattice-${GITHUB_REF_NAME#v}.tar.gz"
-          gh release create "$GITHUB_REF_NAME" "$archive" SHA256SUMS release-manifest.json \
-            --verify-tag --title "$GITHUB_REF_NAME" \
+          archive="gooo-resolution-lattice-${RELEASE_TAG#v}.tar.gz"
+          gh release create "$RELEASE_TAG" "$archive" SHA256SUMS release-manifest.json \
+            --verify-tag --title "$RELEASE_TAG" \
             --notes "Immutable Gooo resolution-lattice source release."
