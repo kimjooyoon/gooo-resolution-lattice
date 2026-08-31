@@ -42,7 +42,10 @@ jobs:
           test -z "$gofmt_files"
           go vet ./...
           test_start=$(date +%s%N)
-          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/test-peak-rss" go test -count=1 -json ./... > "$RUNNER_TEMP/go-test.json"
+          if ! /usr/bin/time -f '%M' -o "$RUNNER_TEMP/test-peak-rss" go test -count=1 -json ./... > "$RUNNER_TEMP/go-test.json"; then
+            cat "$RUNNER_TEMP/go-test.json"
+            exit 1
+          fi
           test_end=$(date +%s%N)
           go_test_total=$(jq -s '[.[] | select(.Action == "run" and .Test != null)] | length' "$RUNNER_TEMP/go-test.json")
           go_test_skipped=$(jq -s '[.[] | select(.Action == "skip" and .Test != null)] | length' "$RUNNER_TEMP/go-test.json")
