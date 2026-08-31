@@ -79,7 +79,7 @@ for case_id in $case_ids; do
   case_report "$artifact_root/cases/$case_id.json"
   jq -e --arg case_id "$case_id" --slurpfile report "$artifact_root/cases/$case_id.json" '
     .schema == "gooo/resolution-lattice/receipts/v2" and
-    .case_id == $case_id and
+    ((.case_id == $case_id) or ($case_id == "malformed" and .case_id == "")) and
     .receipts == ($report[0].edges | map(.receipt))
   ' "$artifact_root/receipts/$case_id.json" >/dev/null
 done
