@@ -139,7 +139,7 @@ jobs:
             "$SUBJECT_SHA" \
             "$artifact/ci-report.json" \
             "$artifact/ci-report.md"
-          jq -e '
+          if ! jq -e '
             .decision == "RESOLUTION_LATTICE_CONFORMANCE_CLOSED" and
             .summary.closed_cells == 12 and .summary.fixed_denominator == 12 and
             .case_summary.total == 10 and
@@ -150,7 +150,10 @@ jobs:
             .runtime.test_counts.reused == 0 and .runtime.test_counts.not_observed == 0 and
             ([.metrics[] | select(.state == "CLOSED")] | length) == 12 and
             (all(.metrics[]; .activity != null and .source_digest != null and .ir_node != null and .generated_artifact != null and .evaluator != null))
-          ' "$artifact/ci-report.json" >/dev/null
+          ' "$artifact/ci-report.json" >/dev/null; then
+            jq . "$artifact/ci-report.json"
+            exit 1
+          fi
           cat "$artifact/ci-report.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload conformance evidence
