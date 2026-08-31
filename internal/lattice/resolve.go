@@ -19,11 +19,11 @@ type levelSpec struct {
 }
 
 var levelSpecs = []levelSpec{
-	{Name: "PROJECT", Stage: "PROJECT", Step: "OBSERVE_PROJECT_EVIDENCE", MissingReason: "PROJECT_EVIDENCE_MISSING", NextOperation: "PROVIDE_PROJECT_EVIDENCE", BlockedBy: "project-evidence", EdgeActivity: "DescendProjectToArtifact"},
-	{Name: "ARTIFACT", Stage: "ARTIFACT", Step: "OBSERVE_ARTIFACT_EVIDENCE", MissingReason: "ARTIFACT_EVIDENCE_MISSING", NextOperation: "PROVIDE_ARTIFACT_EVIDENCE", BlockedBy: "artifact-evidence", EdgeActivity: "DescendArtifactToActivity"},
-	{Name: "ACTIVITY", Stage: "ACTIVITY", Step: "OBSERVE_ACTIVITY_EVIDENCE", MissingReason: "ACTIVITY_EVIDENCE_MISSING", NextOperation: "PROVIDE_ACTIVITY_EVIDENCE", BlockedBy: "activity-evidence", EdgeActivity: "DescendActivityToPredicate"},
-	{Name: "PREDICATE", Stage: "PREDICATE", Step: "OBSERVE_PREDICATE_EVIDENCE", MissingReason: "PREDICATE_EVIDENCE_MISSING", NextOperation: "PROVIDE_PREDICATE_EVIDENCE", BlockedBy: "predicate-evidence", EdgeActivity: "DescendPredicateToField"},
-	{Name: "FIELD", Stage: "FIELD", Step: "OBSERVE_FIELD_EVIDENCE", MissingReason: "FIELD_EVIDENCE_MISSING", NextOperation: "PROVIDE_FIELD_EVIDENCE", BlockedBy: "field-evidence"},
+	{Name: "PROJECT", Stage: "PROJECT", Step: "OBSERVE_PROJECT_EVIDENCE", MissingReason: "PROJECT_EVIDENCE_MISSING", NextOperation: "PROVIDE_PROJECT_EVIDENCE", BlockedBy: "project-evidence"},
+	{Name: "ARTIFACT", Stage: "ARTIFACT", Step: "OBSERVE_ARTIFACT_EVIDENCE", MissingReason: "ARTIFACT_EVIDENCE_MISSING", NextOperation: "PROVIDE_ARTIFACT_EVIDENCE", BlockedBy: "artifact-evidence", EdgeActivity: "DescendProjectToArtifact"},
+	{Name: "ACTIVITY", Stage: "ACTIVITY", Step: "OBSERVE_ACTIVITY_EVIDENCE", MissingReason: "ACTIVITY_EVIDENCE_MISSING", NextOperation: "PROVIDE_ACTIVITY_EVIDENCE", BlockedBy: "activity-evidence", EdgeActivity: "DescendArtifactToActivity"},
+	{Name: "PREDICATE", Stage: "PREDICATE", Step: "OBSERVE_PREDICATE_EVIDENCE", MissingReason: "PREDICATE_EVIDENCE_MISSING", NextOperation: "PROVIDE_PREDICATE_EVIDENCE", BlockedBy: "predicate-evidence", EdgeActivity: "DescendActivityToPredicate"},
+	{Name: "FIELD", Stage: "FIELD", Step: "OBSERVE_FIELD_EVIDENCE", MissingReason: "FIELD_EVIDENCE_MISSING", NextOperation: "PROVIDE_FIELD_EVIDENCE", BlockedBy: "field-evidence", EdgeActivity: "DescendPredicateToField"},
 }
 
 func ResolveJSON(raw []byte, meta Meta) Report {
@@ -81,6 +81,7 @@ func ResolveJSON(raw []byte, meta Meta) Report {
 
 	var previous *Claim
 	var resolved *Claim
+levelLoop:
 	for _, spec := range levelSpecs {
 		evidence, present := input.Evidence[spec.Name]
 		if !present {
@@ -139,10 +140,10 @@ func ResolveJSON(raw []byte, meta Meta) Report {
 			resolved = &copyClaim
 			if previous == nil || previous.State != StateUnknown {
 				previous = &copyClaim
-				break
+				break levelLoop
 			}
 			previous = &copyClaim
-			break
+			break levelLoop
 		case "MISSING", "UNKNOWN":
 			anyUnknown = true
 			if claim.UnknownClass == UnknownDirect && report.FirstDirectCause == nil {
