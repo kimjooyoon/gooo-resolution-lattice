@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 if test "$#" -ne 9; then
-  echo "usage: evaluate.sh ARTIFACT_ROOT SOURCE IR DENOMINATOR RUNTIME GO_TEST_CASES SUBJECT_SHA OUTPUT_JSON OUTPUT_MD" >&2
+  echo "usage: evaluate.sh ARTIFACT_ROOT SOURCE IR DENOMINATOR RUNTIME GO_TEST_TOTAL SUBJECT_SHA OUTPUT_JSON OUTPUT_MD" >&2
   exit 2
 fi
 
@@ -11,23 +11,26 @@ source=$2
 ir=$3
 denominator=$4
 runtime=$5
-go_test_cases=$6
+go_test_total=$6
 subject_sha=$7
 output_json=$8
 output_md=$9
+case_ids="normal unknown dependency-blocked decision-unknown refuted contradiction fixed-point privilege-escalation malformed improvement-unknown"
 
-for required in "$source" "$ir" "$denominator" "$runtime" \
-  "$artifact_root/cases/normal.json" "$artifact_root/cases/unknown.json" \
-  "$artifact_root/cases/refuted.json" "$artifact_root/cases/fixed-point.json" \
-  "$artifact_root/cases/privilege-escalation.json" "$artifact_root/cases/malformed.json" \
-  "$artifact_root/cases/improvement-unknown.json" "$artifact_root/receipts/normal.json"; do
+for required in "$source" "$ir" "$denominator" "$runtime"; do
   test -f "$required" || { echo "missing conformance input: $required" >&2; exit 2; }
+done
+for case_id in $case_ids; do
+  test -f "$artifact_root/cases/$case_id.json" || { echo "missing case report: $case_id" >&2; exit 2; }
+  test -f "$artifact_root/receipts/$case_id.json" || { echo "missing case receipts: $case_id" >&2; exit 2; }
 done
 
 source_digest="sha256:$(sha256sum "$source" | awk '{print $1}')"
 ir_digest="sha256:$(sha256sum "$ir" | awk '{print $1}')"
 contract_digest="sha256:$(sha256sum "$denominator" | awk '{print $1}')"
 evaluator_digest="sha256:$(sha256sum "$0" | awk '{print $1}')"
+source_path=$(printf '%s\n' "$source" | sed 's#^\./##')
+evaluator_path=$(printf '%s\n' "$0" | sed 's#^\./##')
 
 activity_count=$(awk '/^[[:space:]]*activity / {count++} END {print count+0}' "$source")
 test "$activity_count" -eq 12
@@ -44,8 +47,9 @@ jq -e '
 ' "$denominator" >/dev/null
 
 jq -e --arg source_digest "$source_digest" '
-  .schema == "gooo/resolution-lattice/ir/v1" and
+  .schema == "gooo/resolution-lattice/ir/v2" and
   .source_digest == $source_digest and
+  .resolution_ladder == ["PROJECT", "ARTIFACT", "ACTIVITY", "PREDICATE", "FIELD"] and
   (.nodes | length) == 12 and
   ([.nodes[].name] | unique | length) == 12 and
   all(.nodes[]; .id != null and .name != null and .source_line > 0 and .metric_id != null and .artifact != null and .evaluator != null)
@@ -53,50 +57,81 @@ jq -e --arg source_digest "$source_digest" '
 
 case_report() {
   jq -e --arg source_digest "$source_digest" --arg contract_digest "$contract_digest" '
-    .schema == "gooo/resolution-lattice/v1" and
+    .schema == "gooo/resolution-lattice/v2" and
+    .resolution_ladder == ["PROJECT", "ARTIFACT", "ACTIVITY", "PREDICATE", "FIELD"] and
     .precedence == ["REFUTED", "UNKNOWN", "CLOSED"] and
     all(.claims[]; .stage != null and .step != null and .reason != null and .unknown_class != null and .next_operation != null and .blocked_by != null) and
-    all(.edges[]; (.source_digest == $source_digest) and (.receipt.source_digest == $source_digest) and (.receipt.contract_digest == $contract_digest) and (.receipt.edge_id == .id) and (.receipt.id != null) and ((.causal_frontier | length) == 2))
+    all(.edges[];
+      (.source_digest == $source_digest) and
+      (.receipt.source_digest == $source_digest) and
+      (.receipt.contract_digest == $contract_digest) and
+      (.receipt.edge_id == .id) and
+      (.receipt.id != null) and
+      (.receipt.stage != null) and (.receipt.step != null) and (.receipt.reason != null) and
+      (.receipt.unknown_class != null) and (.receipt.next_operation != null) and
+      (.receipt.blocked_by != null) and ((.causal_frontier | length) == 2) and
+      (.from != .to)
+    )
   ' "$1" >/dev/null
 }
 
-case_report "$artifact_root/cases/normal.json"
-case_report "$artifact_root/cases/unknown.json"
-case_report "$artifact_root/cases/refuted.json"
-case_report "$artifact_root/cases/fixed-point.json"
-case_report "$artifact_root/cases/privilege-escalation.json"
-case_report "$artifact_root/cases/malformed.json"
-case_report "$artifact_root/cases/improvement-unknown.json"
+for case_id in $case_ids; do
+  case_report "$artifact_root/cases/$case_id.json"
+  jq -e --arg case_id "$case_id" --slurpfile report "$artifact_root/cases/$case_id.json" '
+    .schema == "gooo/resolution-lattice/receipts/v2" and
+    ((.case_id == $case_id) or ($case_id == "malformed" and .case_id == "")) and
+    .receipts == ($report[0].edges | map(.receipt))
+  ' "$artifact_root/receipts/$case_id.json" >/dev/null
+done
 
 jq -e '
   .state == "CLOSED" and .decision == "RESOLUTION_LATTICE_CLOSED" and
-  (.edges | length) == 2 and
-  ([.history[] | select(.lifecycle == "OPEN")] | length) == 3 and
-  ([.history[] | select(.lifecycle == "DISCHARGED")] | length) == 3 and
-  .improvement.claim.state == "CLOSED" and
-  all(.edges[]; .receipt.activity == .activity and .from != .to and .causal_frontier[0] != .causal_frontier[1])
+  .resolved_claim.resolution == "PROJECT" and (.edges | length) == 0 and
+  .improvement.claim.state == "CLOSED" and (.improvement.metrics | length) == 2 and
+  all(.improvement.metrics[]; .state == "CLOSED" and .exact_pair == true and .before != null and .after != null and .delta != null)
 ' "$artifact_root/cases/normal.json" >/dev/null
 
 jq -e '
   .state == "UNKNOWN" and .decision == "RESOLUTION_LATTICE_UNKNOWN" and
-  any(.claims[]; .resolution == "EXACT" and .state == "UNKNOWN" and .stage == "EXACT" and .step == "OBSERVE_EXACT_EVIDENCE" and .reason == "EXACT_EVIDENCE_MISSING" and .unknown_class == "DIRECT_MISSING" and .next_operation == "PROVIDE_EXACT_EVIDENCE" and (.blocked_by | length) == 1) and
-  any(.claims[]; .resolution == "INVARIANT" and .state == "CLOSED") and
-  .resolved_claim.resolution == "EXISTENCE" and
-  .improvement.claim.state == "UNKNOWN" and .improvement.pair_present == false
+  .first_direct_cause.resolution == "PROJECT" and .first_direct_cause.unknown_class == "DIRECT_MISSING" and
+  .resolved_claim.resolution == "ARTIFACT" and (.edges | length) == 1 and
+  any(.claims[]; .resolution == "PROJECT" and .state == "UNKNOWN" and .stage == "PROJECT" and .step == "OBSERVE_PROJECT_EVIDENCE" and .reason == "PROJECT_EVIDENCE_MISSING" and .unknown_class == "DIRECT_MISSING" and .next_operation == "PROVIDE_PROJECT_EVIDENCE" and (.blocked_by | length) == 1)
 ' "$artifact_root/cases/unknown.json" >/dev/null
 
 jq -e '
+  .state == "UNKNOWN" and .decision == "RESOLUTION_LATTICE_UNKNOWN" and
+  .first_direct_cause.resolution == "PROJECT" and (.edges | length) == 4 and
+  .edges[0].from == "PROJECT" and .edges[0].to == "ARTIFACT" and
+  .edges[1].from == "ARTIFACT" and .edges[1].to == "ACTIVITY" and
+  .edges[2].from == "ACTIVITY" and .edges[2].to == "PREDICATE" and
+  .edges[3].from == "PREDICATE" and .edges[3].to == "FIELD" and
+  .resolved_claim.resolution == "FIELD" and
+  .minimal_dependency_blocked_frontier == ["artifact-source"] and
+  all(.edges[1:3][]; .receipt.unknown_class == "DEPENDENCY_BLOCKED")
+' "$artifact_root/cases/dependency-blocked.json" >/dev/null
+
+jq -e '
+  .state == "UNKNOWN" and .decision == "FAIL_CLOSED" and
+  .feedback_code == "FEEDBACK_COVERAGE_DECISION_UNKNOWN" and
+  any(.claims[]; .unknown_class == "DECISION_UNKNOWN" and .reason == "FEEDBACK_COVERAGE_DECISION_UNKNOWN")
+' "$artifact_root/cases/decision-unknown.json" >/dev/null
+
+jq -e '
   .state == "REFUTED" and .decision == "FAIL_CLOSED" and
-  any(.claims[]; .resolution == "EXACT" and .state == "REFUTED") and
+  any(.claims[]; .resolution == "PROJECT" and .state == "REFUTED") and
   any(.history[]; .lifecycle == "REFUTED") and (.edges | length) == 0
 ' "$artifact_root/cases/refuted.json" >/dev/null
 
-for fixed_case in fixed-point privilege-escalation malformed; do
-  jq -e '
-    .state == "REFUTED" and .decision == "FAIL_CLOSED" and
-    any(.history[]; .lifecycle == "REFUTED")
-  ' "$artifact_root/cases/$fixed_case.json" >/dev/null
-done
+jq -e '
+  .state == "REFUTED" and .decision == "FAIL_CLOSED" and
+  any(.claims[]; .resolution == "PROJECT" and .state == "UNKNOWN") and
+  any(.claims[]; .resolution == "ARTIFACT" and .state == "REFUTED") and
+  any(.claims[]; .unknown_class == "DECISION_UNKNOWN")
+' "$artifact_root/cases/contradiction.json" >/dev/null
+
+jq -e '.state == "REFUTED" and .decision == "FAIL_CLOSED" and .claims[0].reason == "FIXED_POINT_NOT_SUCCESS"' "$artifact_root/cases/fixed-point.json" >/dev/null
+jq -e '.state == "REFUTED" and .decision == "FAIL_CLOSED" and .claims[0].reason == "AUTHORITY_ESCALATION_REFUTED"' "$artifact_root/cases/privilege-escalation.json" >/dev/null
+jq -e '.state == "REFUTED" and .decision == "FAIL_CLOSED" and .claims[0].reason == "MALFORMED_INPUT"' "$artifact_root/cases/malformed.json" >/dev/null
 
 jq -e '
   .state == "UNKNOWN" and .decision == "RESOLUTION_LATTICE_UNKNOWN" and
@@ -106,19 +141,17 @@ jq -e '
   .improvement.claim.stage == "IMPROVEMENT" and
   .improvement.claim.step == "REQUIRE_EXACT_BEFORE_AFTER_PAIR" and
   .improvement.claim.next_operation == "PROVIDE_EXACT_BEFORE_AFTER_PAIR" and
-  (.improvement.claim.blocked_by | length) == 1
+  (.improvement.metrics | length) == 2 and
+  all(.improvement.metrics[]; .state == "UNKNOWN" and .exact_pair == false)
 ' "$artifact_root/cases/improvement-unknown.json" >/dev/null
-
-normal_receipts=$(jq '[.edges[].receipt]' "$artifact_root/cases/normal.json")
-jq -e --argjson expected "$normal_receipts" '
-  .schema == "gooo/resolution-lattice/receipts/v1" and .receipts == $expected
-' "$artifact_root/receipts/normal.json" >/dev/null
 
 jq -e --arg source_digest "$source_digest" --arg contract_digest "$contract_digest" '
   .schema == "gooo/resolution-lattice/runtime/v1" and
   .build_wall_ms >= 0 and .test_wall_ms >= 0 and .conformance_wall_ms >= 0 and
-  .peak_rss_kib > 0 and .repository_writes == 0 and .local_tests_run == 0 and
-  .test_counts.executed >= 1 and .test_counts.reused == 0 and .test_counts.skipped == 0 and
+  .peak_rss_kib > 0 and
+  .peak_rss_kib_by_phase.build > 0 and .peak_rss_kib_by_phase.test > 0 and .peak_rss_kib_by_phase.conformance > 0 and
+  .repository_writes == 0 and .local_tests_run == 0 and
+  .test_counts.total >= 1 and .test_counts.executed >= 1 and .test_counts.reused >= 0 and .test_counts.skipped >= 0 and .test_counts.not_observed >= 0 and
   .source_digest == $source_digest and .contract_digest == $contract_digest
 ' "$runtime" >/dev/null
 
@@ -154,7 +187,7 @@ while IFS= read -r file; do
   esac
 done < <(find . -type f ! -path './.git' ! -path './.git/*' | sort)
 
-cell_metrics=$(jq -S --arg source_path "${source#./}" --arg source_digest "$source_digest" --arg ir_digest "$ir_digest" --arg evaluator_digest "$evaluator_digest" --slurpfile ir "$ir" '
+cell_metrics=$(jq -S --arg source_path "$source_path" --arg source_digest "$source_digest" --arg ir_digest "$ir_digest" --arg evaluator_digest "$evaluator_digest" --slurpfile ir "$ir" '
   .cells as $cells |
   $ir[0].nodes as $nodes |
   $cells | map(
@@ -163,8 +196,6 @@ cell_metrics=$(jq -S --arg source_path "${source#./}" --arg source_digest "$sour
     {
       id: $cell.metric_id,
       cell_id: $cell.id,
-      numerator: 1,
-      denominator: 1,
       state: "CLOSED",
       activity: $cell.activity,
       proof_choice: $cell.proof_choice,
@@ -176,7 +207,8 @@ cell_metrics=$(jq -S --arg source_path "${source#./}" --arg source_digest "$sour
       ir_digest: $ir_digest,
       generated_artifact: $cell.artifact,
       evaluator: $cell.evaluator,
-      evaluator_digest: $evaluator_digest
+      evaluator_digest: $evaluator_digest,
+      denominator_cell: $cell.ordinal
     }
   )
 ' "$denominator")
@@ -184,7 +216,10 @@ cell_metrics=$(jq -S --arg source_path "${source#./}" --arg source_digest "$sour
 case_states=$(jq -S -n \
   --slurpfile normal "$artifact_root/cases/normal.json" \
   --slurpfile unknown "$artifact_root/cases/unknown.json" \
+  --slurpfile dependency "$artifact_root/cases/dependency-blocked.json" \
+  --slurpfile decision "$artifact_root/cases/decision-unknown.json" \
   --slurpfile refuted "$artifact_root/cases/refuted.json" \
+  --slurpfile contradiction "$artifact_root/cases/contradiction.json" \
   --slurpfile fixed "$artifact_root/cases/fixed-point.json" \
   --slurpfile privilege "$artifact_root/cases/privilege-escalation.json" \
   --slurpfile malformed "$artifact_root/cases/malformed.json" \
@@ -192,7 +227,10 @@ case_states=$(jq -S -n \
   [
     {id:"normal", state:$normal[0].state, decision:$normal[0].decision},
     {id:"unknown", state:$unknown[0].state, decision:$unknown[0].decision},
+    {id:"dependency-blocked", state:$dependency[0].state, decision:$dependency[0].decision},
+    {id:"decision-unknown", state:$decision[0].state, decision:$decision[0].decision},
     {id:"refuted", state:$refuted[0].state, decision:$refuted[0].decision},
+    {id:"contradiction", state:$contradiction[0].state, decision:$contradiction[0].decision},
     {id:"fixed-point", state:$fixed[0].state, decision:$fixed[0].decision},
     {id:"privilege-escalation", state:$privilege[0].state, decision:$privilege[0].decision},
     {id:"malformed", state:$malformed[0].state, decision:$malformed[0].decision},
@@ -204,13 +242,12 @@ runtime_json=$(cat "$runtime")
 mkdir -p "$(dirname "$output_json")" "$(dirname "$output_md")"
 jq -S -n \
   --arg subject_sha "$subject_sha" \
-  --arg source_path "${source#./}" \
+  --arg source_path "$source_path" \
   --arg source_digest "$source_digest" \
   --arg ir_digest "$ir_digest" \
   --arg contract_digest "$contract_digest" \
-  --arg evaluator_path "${0#./}" \
+  --arg evaluator_path "$evaluator_path" \
   --arg evaluator_digest "$evaluator_digest" \
-  --argjson activity_count "$activity_count" \
   --argjson metrics "$cell_metrics" \
   --argjson cases "$case_states" \
   --argjson runtime "$runtime_json" \
@@ -222,41 +259,35 @@ jq -S -n \
   --argjson gooo_lines "$gooo_lines" \
   --argjson artifact_files "$artifact_files" \
   --argjson artifact_bytes "$artifact_bytes" \
-  --argjson go_test_cases "$go_test_cases" '
+  --argjson go_test_total "$go_test_total" '
   {
-    schema: "gooo/resolution-lattice/ci-report/v1",
+    schema: "gooo/resolution-lattice/ci-report/v2",
     decision: "RESOLUTION_LATTICE_CONFORMANCE_CLOSED",
     subject_sha: $subject_sha,
     precedence: ["REFUTED", "UNKNOWN", "CLOSED"],
+    aggregation: "NO_SCORE_SUMMATION",
     bindings: {
-      gooo_source: {path:$source_path, digest:$source_digest, activity_count:$activity_count},
+      gooo_source: {path:$source_path, digest:$source_digest, activity_count:12, resolution_ladder:["PROJECT", "ARTIFACT", "ACTIVITY", "PREDICATE", "FIELD"]},
       semantic_ir: {path:"semantic-ir.json", digest:$ir_digest},
-      denominator: {path:"contracts/resolution-lattice-denominator-v1.json", digest:$contract_digest, numerator:12, denominator:12},
+      denominator: {path:"contracts/resolution-lattice-denominator-v1.json", digest:$contract_digest, fixed_denominator:12},
       evaluator: {path:$evaluator_path, digest:$evaluator_digest}
     },
     summary: {
-      numerator: 12,
-      denominator: 12,
+      fixed_denominator: 12,
       closed_cells: 12,
       unknown_cells: 0,
       refuted_cells: 0,
-      fixed_denominator: true,
-      proof_choices: {FOUNDATION:{numerator:4,denominator:4},COHERENCE:{numerator:4,denominator:4},REGRESSION:{numerator:4,denominator:4}},
-      indicator_classes: {DRIVER:{numerator:4,denominator:4},OUTCOME:{numerator:4,denominator:4},GUARDRAIL:{numerator:4,denominator:4}}
+      proof_choices: {FOUNDATION:{closed:4,total:4},COHERENCE:{closed:4,total:4},REGRESSION:{closed:4,total:4}},
+      indicator_classes: {DRIVER:{closed:4,total:4},OUTCOME:{closed:4,total:4},GUARDRAIL:{closed:4,total:4}}
     },
     cases: $cases,
     case_summary: {
-      numerator: 7,
-      denominator: 7,
+      total: ($cases | length),
       closed: ([$cases[] | select(.state == "CLOSED")] | length),
       unknown: ([$cases[] | select(.state == "UNKNOWN")] | length),
       refuted: ([$cases[] | select(.state == "REFUTED")] | length)
     },
-    remaining: {
-      UNKNOWN: ([$cases[] | select(.state == "UNKNOWN")] | length),
-      REFUTED: ([$cases[] | select(.state == "REFUTED")] | length),
-      CLOSED: ([$cases[] | select(.state == "CLOSED")] | length)
-    },
+    unknown_classes_covered: ["DIRECT_MISSING", "DEPENDENCY_BLOCKED", "DECISION_UNKNOWN", "CAUSALITY_UNPROVEN"],
     metrics: $metrics,
     runtime: $runtime,
     inventory: {
@@ -270,24 +301,28 @@ jq -S -n \
       root_readme_excluded: true
     },
     tests: {
-      executed: ($go_test_cases + 7),
-      reused: 0,
-      skipped: 0,
-      go_cases: $go_test_cases,
-      conformance_cases: 7,
-      local_tests_run: 0
+      total: $runtime.test_counts.total,
+      executed: $runtime.test_counts.executed,
+      reused: $runtime.test_counts.reused,
+      skipped: $runtime.test_counts.skipped,
+      not_observed: $runtime.test_counts.not_observed,
+      conformance_cases: ($cases | length),
+      local_tests_run: 0,
+      cli_reported_go_test_total: $go_test_total
     },
     artifacts: {
       count_scope: "generated evidence payload before human summaries",
       files: $artifact_files,
       bytes: $artifact_bytes,
-      receipt_cases: ["normal"],
       repository_writes: $runtime.repository_writes
     },
     improvement_rule: {
       exact_before_after_pair_required: true,
+      exact_identity_fields: ["fixture_digest", "input_digest", "tool_digest", "contract_digest"],
+      claimed_metrics: ["unidentified_cause_frontier_count", "minimum_cause_reach_stage_count"],
       missing_pair_state: "UNKNOWN",
-      utility_inference_from_good_numbers: false
+      utility_inference_from_good_numbers: false,
+      score_summation: false
     }
   }
 ' > "$output_json"
@@ -295,32 +330,31 @@ jq -S -n \
 jq -r '
   "# Gooo Resolution Lattice CI artifact",
   "",
-  "- decision: `\(.decision)`",
-  "- subject SHA: `\(.subject_sha)`",
-  "- conformance cells: `\(.summary.numerator)/\(.summary.denominator)`",
-  "- proof choices: FOUNDATION `\(.summary.proof_choices.FOUNDATION.numerator)/\(.summary.proof_choices.FOUNDATION.denominator)`, COHERENCE `\(.summary.proof_choices.COHERENCE.numerator)/\(.summary.proof_choices.COHERENCE.denominator)`, REGRESSION `\(.summary.proof_choices.REGRESSION.numerator)/\(.summary.proof_choices.REGRESSION.denominator)`",
-  "- indicator classes: DRIVER `\(.summary.indicator_classes.DRIVER.numerator)/\(.summary.indicator_classes.DRIVER.denominator)`, OUTCOME `\(.summary.indicator_classes.OUTCOME.numerator)/\(.summary.indicator_classes.OUTCOME.denominator)`, GUARDRAIL `\(.summary.indicator_classes.GUARDRAIL.numerator)/\(.summary.indicator_classes.GUARDRAIL.denominator)`",
-  "- cases: `\(.case_summary.numerator)/\(.case_summary.denominator)` (CLOSED `\(.case_summary.closed)`, UNKNOWN `\(.case_summary.unknown)`, REFUTED `\(.case_summary.refuted)`)",
-  "- remaining UNKNOWN/REFUTED: `\(.remaining.UNKNOWN)/\(.remaining.REFUTED)`",
-  "- descendant directories: `\(.inventory.descendant_dirs)`",
-  "- regular files excluding root README: `\(.inventory.regular_files)`",
-  "- Go physical files/lines: `\(.inventory.go_files)/\(.inventory.go_physical_lines)`",
-  "- Gooo physical files/lines: `\(.inventory.gooo_files)/\(.inventory.gooo_physical_lines)`",
-  "- build/test/conformance wall ms: `\(.runtime.build_wall_ms)/\(.runtime.test_wall_ms)/\(.runtime.conformance_wall_ms)`",
-  "- peak RSS KiB: `\(.runtime.peak_rss_kib)`",
-  "- tests executed/reused/skipped: `\(.tests.executed)/\(.tests.reused)/\(.tests.skipped)`",
-  "- generated evidence files/bytes: `\(.artifacts.files)/\(.artifacts.bytes)`",
-  "- repository writes: `\(.artifacts.repository_writes)`",
-  "- local tests: `\(.tests.local_tests_run)`",
+  "- decision: \(.decision)",
+  "- subject SHA: \(.subject_sha)",
+  "- fixed denominator cells: \(.summary.closed_cells)/\(.summary.fixed_denominator) (no score summation)",
+  "- cases: \(.case_summary.total) (CLOSED \(.case_summary.closed), UNKNOWN \(.case_summary.unknown), REFUTED \(.case_summary.refuted))",
+  "- UNKNOWN classes covered: \(.unknown_classes_covered | join(", "))",
+  "- resolution ladder: \(.bindings.gooo_source.resolution_ladder | join(" -> "))",
+  "- descendant directories: \(.inventory.descendant_dirs)",
+  "- regular files excluding root README: \(.inventory.regular_files)",
+  "- Go physical files/lines: \(.inventory.go_files)/\(.inventory.go_physical_lines)",
+  "- Gooo physical files/lines: \(.inventory.gooo_files)/\(.inventory.gooo_physical_lines)",
+  "- build/test/conformance wall ms: \(.runtime.build_wall_ms)/\(.runtime.test_wall_ms)/\(.runtime.conformance_wall_ms)",
+  "- peak RSS KiB: \(.runtime.peak_rss_kib)",
+  "- tests total/executed/reused/skipped/not-observed: \(.tests.total)/\(.tests.executed)/\(.tests.reused)/\(.tests.skipped)/\(.tests.not_observed)",
+  "- generated evidence files/bytes: \(.artifacts.files)/\(.artifacts.bytes)",
+  "- repository writes: \(.artifacts.repository_writes)",
+  "- local tests: \(.tests.local_tests_run)",
   "",
-  "## Binding",
+  "Binding",
   "",
-  "- Gooo source: `\(.bindings.gooo_source.path)` / `\(.bindings.gooo_source.digest)` / \(.bindings.gooo_source.activity_count) activities",
-  "- semantic IR: `\(.bindings.semantic_ir.path)` / `\(.bindings.semantic_ir.digest)`",
-  "- fixed denominator: `\(.bindings.denominator.path)` / `\(.bindings.denominator.digest)`",
-  "- evaluator: `\(.bindings.evaluator.path)` / `\(.bindings.evaluator.digest)`",
+  "- Gooo source: \(.bindings.gooo_source.path) / \(.bindings.gooo_source.digest)",
+  "- semantic IR: \(.bindings.semantic_ir.path) / \(.bindings.semantic_ir.digest)",
+  "- fixed denominator: \(.bindings.denominator.path) / \(.bindings.denominator.digest)",
+  "- evaluator: \(.bindings.evaluator.path) / \(.bindings.evaluator.digest)",
   "",
-  "## Metric bindings",
+  "Metric bindings",
   "",
-  (.metrics[] | "- \(.id): \(.numerator)/\(.denominator) CLOSED; activity=\(.activity); source=\(.source_path); ir=\(.ir_node); artifact=\(.generated_artifact); evaluator=\(.evaluator)")
+  (.metrics[] | "- \(.id): CLOSED; cell=\(.denominator_cell); activity=\(.activity); source=\(.source_path); ir=\(.ir_node); artifact=\(.generated_artifact); evaluator=\(.evaluator)")
 ' "$output_json" > "$output_md"

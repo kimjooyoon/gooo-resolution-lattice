@@ -1,0 +1,53 @@
+{
+  "schema": "gooo/resolution-lattice/input/v2",
+  "case_id": "dependency-blocked",
+  "subject": "claim://dependency/1",
+  "start_resolution": "PROJECT",
+  "evidence": {
+    "PROJECT": {"status": "MISSING", "observed": "", "digest": ""},
+    "ARTIFACT": {
+      "status": "UNKNOWN",
+      "observed": "",
+      "digest": "",
+      "stage": "ARTIFACT",
+      "step": "RESOLVE_ARTIFACT_DEPENDENCY",
+      "reason": "ARTIFACT_DEPENDENCY_UNAVAILABLE",
+      "unknown_class": "DEPENDENCY_BLOCKED",
+      "next_operation": "RESOLVE_ARTIFACT_DEPENDENCY",
+      "blocked_by": ["artifact-source"]
+    },
+    "ACTIVITY": {
+      "status": "UNKNOWN",
+      "observed": "",
+      "digest": "",
+      "stage": "ACTIVITY",
+      "step": "RESOLVE_ACTIVITY_DEPENDENCY",
+      "reason": "ACTIVITY_DEPENDENCY_UNAVAILABLE",
+      "unknown_class": "DEPENDENCY_BLOCKED",
+      "next_operation": "RESOLVE_ACTIVITY_DEPENDENCY",
+      "blocked_by": ["activity-source"]
+    },
+    "PREDICATE": {
+      "status": "UNKNOWN",
+      "observed": "",
+      "digest": "",
+      "stage": "PREDICATE",
+      "step": "RESOLVE_PREDICATE_DEPENDENCY",
+      "reason": "PREDICATE_DEPENDENCY_UNAVAILABLE",
+      "unknown_class": "DEPENDENCY_BLOCKED",
+      "next_operation": "RESOLVE_PREDICATE_DEPENDENCY",
+      "blocked_by": ["predicate-source"]
+    },
+    "FIELD": {"status": "SUPPORTS", "observed": "field resolved", "digest": "field-dependency"}
+  },
+  "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 0, "requested_privilege_escalation": false},
+  "improvement": {
+    "fixture_digest": "fixture-resolution-v2",
+    "input_digest": "input-dependency-1",
+    "tool_digest": "tool-resolution-lattice-v2",
+    "contract_digest": "contract-resolution-lattice-v1",
+    "exact_before": {"value": "before", "digest": "before-dependency", "unidentified_cause_frontier_count": 3, "minimum_cause_reach_stage_count": 5},
+    "exact_after": {"value": "after", "digest": "after-dependency", "unidentified_cause_frontier_count": 3, "minimum_cause_reach_stage_count": 5},
+    "utility_evidence": true
+  }
+}

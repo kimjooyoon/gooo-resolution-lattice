@@ -1,0 +1,15 @@
+{
+  "schema": "gooo/resolution-lattice/input/v2",
+  "case_id": "contradiction",
+  "subject": "claim://contradiction/1",
+  "start_resolution": "PROJECT",
+  "decision": "UNRECOGNIZED_DECISION",
+  "evidence": {
+    "PROJECT": {"status": "MISSING", "observed": "", "digest": ""},
+    "ARTIFACT": {"status": "CONTRADICTS", "observed": "artifact contradicts project", "digest": "artifact-contradiction"},
+    "ACTIVITY": {"status": "SUPPORTS", "observed": "activity valid", "digest": "activity-contradiction"},
+    "PREDICATE": {"status": "SUPPORTS", "observed": "predicate valid", "digest": "predicate-contradiction"},
+    "FIELD": {"status": "SUPPORTS", "observed": "field valid", "digest": "field-contradiction"}
+  },
+  "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 0, "requested_privilege_escalation": false}
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -14,12 +15,15 @@ type levelSpec struct {
 	MissingReason string
 	NextOperation string
 	BlockedBy     string
+	EdgeActivity  string
 }
 
 var levelSpecs = []levelSpec{
-	{Name: "EXACT", Stage: "EXACT", Step: "OBSERVE_EXACT_EVIDENCE", MissingReason: "EXACT_EVIDENCE_MISSING", NextOperation: "PROVIDE_EXACT_EVIDENCE", BlockedBy: "exact-evidence"},
-	{Name: "INVARIANT", Stage: "INVARIANT", Step: "OBSERVE_INVARIANT_EVIDENCE", MissingReason: "INVARIANT_EVIDENCE_MISSING", NextOperation: "PROVIDE_INVARIANT_EVIDENCE", BlockedBy: "invariant-evidence"},
-	{Name: "EXISTENCE", Stage: "EXISTENCE", Step: "OBSERVE_EXISTENCE_EVIDENCE", MissingReason: "EXISTENCE_EVIDENCE_MISSING", NextOperation: "PROVIDE_EXISTENCE_EVIDENCE", BlockedBy: "existence-evidence"},
+	{Name: "PROJECT", Stage: "PROJECT", Step: "OBSERVE_PROJECT_EVIDENCE", MissingReason: "PROJECT_EVIDENCE_MISSING", NextOperation: "PROVIDE_PROJECT_EVIDENCE", BlockedBy: "project-evidence"},
+	{Name: "ARTIFACT", Stage: "ARTIFACT", Step: "OBSERVE_ARTIFACT_EVIDENCE", MissingReason: "ARTIFACT_EVIDENCE_MISSING", NextOperation: "PROVIDE_ARTIFACT_EVIDENCE", BlockedBy: "artifact-evidence", EdgeActivity: "DescendProjectToArtifact"},
+	{Name: "ACTIVITY", Stage: "ACTIVITY", Step: "OBSERVE_ACTIVITY_EVIDENCE", MissingReason: "ACTIVITY_EVIDENCE_MISSING", NextOperation: "PROVIDE_ACTIVITY_EVIDENCE", BlockedBy: "activity-evidence", EdgeActivity: "DescendArtifactToActivity"},
+	{Name: "PREDICATE", Stage: "PREDICATE", Step: "OBSERVE_PREDICATE_EVIDENCE", MissingReason: "PREDICATE_EVIDENCE_MISSING", NextOperation: "PROVIDE_PREDICATE_EVIDENCE", BlockedBy: "predicate-evidence", EdgeActivity: "DescendActivityToPredicate"},
+	{Name: "FIELD", Stage: "FIELD", Step: "OBSERVE_FIELD_EVIDENCE", MissingReason: "FIELD_EVIDENCE_MISSING", NextOperation: "PROVIDE_FIELD_EVIDENCE", BlockedBy: "field-evidence", EdgeActivity: "DescendPredicateToField"},
 }
 
 func ResolveJSON(raw []byte, meta Meta) Report {
@@ -43,25 +47,59 @@ func ResolveJSON(raw []byte, meta Meta) Report {
 		return failClosed(report, "AUTHORITY", "VALIDATE_READ_ONLY_BOUNDARY", "AUTHORITY_ESCALATION_REFUTED", "USE_READ_ONLY_AUTHORITY", "authority-boundary")
 	}
 	if input.StartResolution == "FIXED_POINT" {
-		return failClosed(report, "INPUT", "VALIDATE_START_RESOLUTION", "FIXED_POINT_NOT_SUCCESS", "USE_EXACT_START_RESOLUTION", "start-resolution")
+		return failClosed(report, "INPUT", "VALIDATE_START_RESOLUTION", "FIXED_POINT_NOT_SUCCESS", "USE_PROJECT_START_RESOLUTION", "start-resolution")
 	}
 
-	previousOpenID := ""
-	previousLevel := ""
 	anyUnknown := false
 	anyRefuted := false
+	decisionUnknown := input.Decision != "" && input.Decision != "FIXED_POINT"
+	if decisionUnknown {
+		claim := Claim{
+			ID:            input.CaseID + ":decision",
+			Resolution:    "PROJECT",
+			State:         StateUnknown,
+			Stage:         "DECISION",
+			Step:          "VALIDATE_UPPER_DECISION",
+			Reason:        FeedbackDecisionUnknown,
+			UnknownClass:  UnknownDecision,
+			NextOperation: "PROVIDE_EXPLICIT_FIXED_POINT",
+			BlockedBy:     []string{"upper-decision"},
+		}
+		report.Claims = append(report.Claims, claim)
+		report.History = append(report.History, HistoryEvent{
+			Sequence:   len(report.History) + 1,
+			ID:         eventID(input.CaseID, "DECISION", LifecycleOpen),
+			ClaimID:    claim.ID,
+			Resolution: claim.Resolution,
+			Lifecycle:  LifecycleOpen,
+			Activity:   bindingActivity(meta, "ResolveProjectClaim"),
+			Claim:      claim,
+		})
+		anyUnknown = true
+		report.DecisionInput = input.Decision
+	}
+
+	var previous *Claim
 	var resolved *Claim
-	for index, spec := range levelSpecs {
+levelLoop:
+	for _, spec := range levelSpecs {
 		evidence, present := input.Evidence[spec.Name]
 		if !present {
 			evidence = Evidence{Status: "MISSING"}
 		}
-		openID := eventID(input.CaseID, spec.Name, LifecycleOpen)
-		claim := claimFor(input.CaseID, spec, StateUnknown, spec.MissingReason, "DIRECT_MISSING", spec.NextOperation, spec.BlockedBy)
-		if present {
-			claim = claimForEvidence(input.CaseID, spec, evidence)
+		status := evidence.Status
+		if !present {
+			status = "MISSING"
 		}
+		if present && status == "" {
+			return failClosed(report, "INPUT", "VALIDATE_EVIDENCE_STATUS", "MALFORMED_EVIDENCE_STATUS", "REPAIR_EVIDENCE_STATUS", "evidence-status")
+		}
+		if (status == "MISSING" || status == "UNKNOWN") && evidence.UnknownClass != "" && !validUnknownClass(evidence.UnknownClass) {
+			return failClosed(report, "INPUT", "VALIDATE_UNKNOWN_CLASS", "MALFORMED_UNKNOWN_CLASS", "REPAIR_UNKNOWN_CLASS", "unknown-class")
+		}
+		claim := claimForEvidence(input.CaseID, spec, evidence)
 		report.Claims = append(report.Claims, claim)
+		openID := eventID(input.CaseID, spec.Name, LifecycleOpen)
 		report.History = append(report.History, HistoryEvent{
 			Sequence:   len(report.History) + 1,
 			ID:         openID,
@@ -69,28 +107,25 @@ func ResolveJSON(raw []byte, meta Meta) Report {
 			Resolution: spec.Name,
 			Lifecycle:  LifecycleOpen,
 			Activity:   bindingActivity(meta, "PreserveClaimHistory"),
-			ReceiptID:  "",
 			Claim:      claim,
 		})
 
-		if previousOpenID != "" {
-			edge, err := makeEdge(meta, report, input.CaseID, previousLevel, spec.Name, previousOpenID, openID, claim)
+		if previous != nil && previous.State == StateUnknown {
+			edge, err := makeEdge(meta, report, input.CaseID, spec.EdgeActivity, *previous, claim, openID)
 			if err != nil {
 				return failClosed(report, "BINDING", "BIND_GENERATED_RECEIPT", "META_ACTIVITY_BINDING_MISSING", "REGENERATE_SEMANTIC_IR", "meta-binding")
 			}
 			report.Edges = append(report.Edges, edge)
 			report.CausalFrontier = append([]string(nil), edge.CausalFrontier...)
+			report.History[len(report.History)-2].ReceiptID = edge.Receipt.ID
+			if claim.UnknownClass == UnknownDependency {
+				report.MinimalDependencyBlockedFrontier = setMinimalDependencyFrontier(report.MinimalDependencyBlockedFrontier, claim.BlockedBy...)
+			}
 		}
 
-		switch evidence.Status {
+		switch status {
 		case "SUPPORTS":
-			claim.State = StateClosed
-			claim.Stage = "NONE"
-			claim.Step = "NONE"
-			claim.Reason = spec.Name + "_EVIDENCE_SUPPORTED"
-			claim.UnknownClass = "NONE"
-			claim.NextOperation = "NONE"
-			claim.BlockedBy = []string{}
+			claim = dischargedClaim(input.CaseID, spec)
 			report.Claims[len(report.Claims)-1] = claim
 			report.History = append(report.History, HistoryEvent{
 				Sequence:   len(report.History) + 1,
@@ -99,21 +134,28 @@ func ResolveJSON(raw []byte, meta Meta) Report {
 				Resolution: spec.Name,
 				Lifecycle:  LifecycleClose,
 				Activity:   bindingActivity(meta, "DischargeSupportedClaim"),
-				ReceiptID:  "",
 				Claim:      claim,
 			})
 			copyClaim := claim
 			resolved = &copyClaim
-		case "MISSING":
+			if previous == nil || previous.State != StateUnknown {
+				previous = &copyClaim
+				break levelLoop
+			}
+			previous = &copyClaim
+			break levelLoop
+		case "MISSING", "UNKNOWN":
 			anyUnknown = true
-		case "CONTRADICTS":
-			claim.State = StateRefuted
-			claim.Stage = spec.Stage
-			claim.Step = spec.Step
-			claim.Reason = spec.Name + "_EVIDENCE_CONTRADICTED"
-			claim.UnknownClass = "NONE"
-			claim.NextOperation = "REPAIR_CONTRADICTING_EVIDENCE"
-			claim.BlockedBy = []string{strings.ToLower(spec.Name) + "-contradiction"}
+			if claim.UnknownClass == UnknownDirect && report.FirstDirectCause == nil {
+				copyClaim := claim
+				report.FirstDirectCause = &copyClaim
+			}
+			if claim.UnknownClass == UnknownDependency {
+				report.MinimalDependencyBlockedFrontier = setMinimalDependencyFrontier(report.MinimalDependencyBlockedFrontier, claim.BlockedBy...)
+			}
+			previous = &claim
+		case "CONTRADICTS", "REFUTED":
+			claim = refutedClaim(input.CaseID, spec)
 			report.Claims[len(report.Claims)-1] = claim
 			report.History = append(report.History, HistoryEvent{
 				Sequence:   len(report.History) + 1,
@@ -122,20 +164,15 @@ func ResolveJSON(raw []byte, meta Meta) Report {
 				Resolution: spec.Name,
 				Lifecycle:  LifecycleRefute,
 				Activity:   bindingActivity(meta, "RefuteContradiction"),
-				ReceiptID:  "",
 				Claim:      claim,
 			})
 			anyRefuted = true
 			resolved = nil
+			break
 		default:
 			return failClosed(report, "INPUT", "VALIDATE_EVIDENCE_STATUS", "MALFORMED_EVIDENCE_STATUS", "REPAIR_EVIDENCE_STATUS", "evidence-status")
 		}
 		if anyRefuted {
-			break
-		}
-		previousOpenID = openID
-		previousLevel = spec.Name
-		if index == len(levelSpecs)-1 {
 			break
 		}
 	}
@@ -150,6 +187,10 @@ func ResolveJSON(raw []byte, meta Meta) Report {
 	report.ResolvedClaim = resolved
 	report.State = precedence(anyRefuted, anyUnknown)
 	report.Decision = decisionFor(report.State)
+	if decisionUnknown && report.State != StateRefuted {
+		report.Decision = DecisionFailClosed
+		report.FeedbackCode = FeedbackDecisionUnknown
+	}
 	if report.State == StateUnknown && report.ResolvedClaim == nil && len(report.Claims) > 0 {
 		last := report.Claims[len(report.Claims)-1]
 		report.ResolvedClaim = &last
@@ -161,10 +202,10 @@ func ResolveJSON(raw []byte, meta Meta) Report {
 }
 
 func validateInput(input Input) error {
-	if input.Schema != InputSchema || input.CaseID == "" || input.Subject == "" {
+	if (input.Schema != InputSchema && input.Schema != LegacyInputSchema) || input.CaseID == "" || input.Subject == "" {
 		return errors.New("MALFORMED_INPUT_CONTRACT")
 	}
-	if input.StartResolution != "EXACT" && input.StartResolution != "FIXED_POINT" {
+	if input.StartResolution != "PROJECT" && input.StartResolution != "FIXED_POINT" {
 		return errors.New("ARBITRARY_PARENT_RESOLUTION_REFUTED")
 	}
 	if input.Evidence == nil {
@@ -175,18 +216,20 @@ func validateInput(input Input) error {
 
 func baseReport(meta Meta, inputDigest string) Report {
 	return Report{
-		Schema:             Schema,
-		Decision:           "FAIL_CLOSED",
-		InputDigest:        inputDigest,
-		ToolDigest:         meta.ToolDigest,
-		ContractDigest:     meta.ContractDigest,
-		State:              StateRefuted,
-		Precedence:         []string{StateRefuted, StateUnknown, StateClosed},
-		Claims:             []Claim{},
-		History:            []HistoryEvent{},
-		Edges:              []DescentEdge{},
-		CausalFrontier:     []string{},
-		GeneratedArtifacts: []string{"report.json", "receipts.json"},
+		Schema:                           Schema,
+		Decision:                         DecisionFailClosed,
+		InputDigest:                      inputDigest,
+		ToolDigest:                       meta.ToolDigest,
+		ContractDigest:                   meta.ContractDigest,
+		ResolutionLadder:                 append([]string(nil), ResolutionLevels...),
+		State:                            StateRefuted,
+		Precedence:                       []string{StateRefuted, StateUnknown, StateClosed},
+		Claims:                           []Claim{},
+		History:                          []HistoryEvent{},
+		Edges:                            []DescentEdge{},
+		CausalFrontier:                   []string{},
+		MinimalDependencyBlockedFrontier: []string{},
+		GeneratedArtifacts:               []string{"report.json", "receipts.json"},
 		Authority: AuthorityReport{
 			ObservationMode: "UNKNOWN",
 			ReadOnly:        true,
@@ -209,16 +252,16 @@ func failClosed(report Report, stage, step, reason, nextOperation, blockedBy str
 	report.Claims = append(report.Claims, claim)
 	report.History = append(report.History,
 		HistoryEvent{
-			Sequence:   1,
+			Sequence:   len(report.History) + 1,
 			ID:         report.CaseID + ":input:open",
 			ClaimID:    claim.ID,
 			Resolution: "INPUT",
 			Lifecycle:  LifecycleOpen,
-			Activity:   "ResolveExactClaim",
+			Activity:   "ResolveProjectClaim",
 			Claim:      claim,
 		},
 		HistoryEvent{
-			Sequence:   2,
+			Sequence:   len(report.History) + 1,
 			ID:         report.CaseID + ":input:refuted",
 			ClaimID:    claim.ID,
 			Resolution: "INPUT",
@@ -227,68 +270,97 @@ func failClosed(report Report, stage, step, reason, nextOperation, blockedBy str
 			Claim:      claim,
 		})
 	report.State = StateRefuted
-	report.Decision = "FAIL_CLOSED"
-	report.Authority.ReadOnly = false
+	report.Decision = DecisionFailClosed
+	report.FeedbackCode = ""
+	report.Authority.ReadOnly = true
 	return report
 }
 
-func claimFor(caseID string, spec levelSpec, state, reason, unknownClass, nextOperation, blockedBy string) Claim {
-	claim := Claim{
-		ID:            caseID + ":" + strings.ToLower(spec.Name),
-		Resolution:    spec.Name,
-		State:         state,
-		Stage:         spec.Stage,
-		Step:          spec.Step,
-		Reason:        reason,
-		UnknownClass:  unknownClass,
-		NextOperation: nextOperation,
-		BlockedBy:     []string{blockedBy},
-	}
-	if blockedBy == "" {
-		claim.BlockedBy = []string{}
-	}
-	return claim
-}
-
 func claimForEvidence(caseID string, spec levelSpec, evidence Evidence) Claim {
-	if evidence.Status == "SUPPORTS" {
-		return claimFor(caseID, spec, StateClosed, spec.Name+"_EVIDENCE_SUPPORTED", "NONE", "NONE", "")
+	switch evidence.Status {
+	case "SUPPORTS":
+		return Claim{ID: caseID + ":" + strings.ToLower(spec.Name), Resolution: spec.Name, State: StateClosed, Stage: "NONE", Step: "NONE", Reason: spec.Name + "_EVIDENCE_SUPPORTED", UnknownClass: "NONE", NextOperation: "NONE", BlockedBy: []string{}}
+	case "CONTRADICTS", "REFUTED":
+		return refutedClaim(caseID, spec)
+	default:
+		unknownClass := evidence.UnknownClass
+		if unknownClass == "" {
+			unknownClass = UnknownDirect
+		}
+		stage := evidence.Stage
+		if stage == "" {
+			stage = spec.Stage
+		}
+		step := evidence.Step
+		if step == "" {
+			step = spec.Step
+		}
+		reason := evidence.Reason
+		if reason == "" {
+			reason = spec.MissingReason
+		}
+		next := evidence.NextOperation
+		if next == "" {
+			next = spec.NextOperation
+		}
+		blockedBy := normalizeFrontier(evidence.BlockedBy)
+		if len(blockedBy) == 0 {
+			blockedBy = []string{spec.BlockedBy}
+		}
+		return Claim{
+			ID:            caseID + ":" + strings.ToLower(spec.Name),
+			Resolution:    spec.Name,
+			State:         StateUnknown,
+			Stage:         stage,
+			Step:          step,
+			Reason:        reason,
+			UnknownClass:  unknownClass,
+			NextOperation: next,
+			BlockedBy:     blockedBy,
+		}
 	}
-	if evidence.Status == "CONTRADICTS" {
-		return claimFor(caseID, spec, StateRefuted, spec.Name+"_EVIDENCE_CONTRADICTED", "NONE", "REPAIR_CONTRADICTING_EVIDENCE", strings.ToLower(spec.Name)+"-contradiction")
-	}
-	return claimFor(caseID, spec, StateUnknown, spec.MissingReason, "DIRECT_MISSING", spec.NextOperation, spec.BlockedBy)
 }
 
-func makeEdge(meta Meta, report Report, caseID, from, to, fromOpen, toOpen string, output Claim) (DescentEdge, error) {
-	activity := "DescendExactToInvariant"
-	if from == "INVARIANT" && to == "EXISTENCE" {
-		activity = "DescendInvariantToExistence"
-	}
+func dischargedClaim(caseID string, spec levelSpec) Claim {
+	return Claim{ID: caseID + ":" + strings.ToLower(spec.Name), Resolution: spec.Name, State: StateClosed, Stage: "NONE", Step: "NONE", Reason: spec.Name + "_EVIDENCE_SUPPORTED", UnknownClass: "NONE", NextOperation: "NONE", BlockedBy: []string{}}
+}
+
+func refutedClaim(caseID string, spec levelSpec) Claim {
+	return Claim{ID: caseID + ":" + strings.ToLower(spec.Name), Resolution: spec.Name, State: StateRefuted, Stage: spec.Stage, Step: spec.Step, Reason: spec.Name + "_EVIDENCE_CONTRADICTED", UnknownClass: "NONE", NextOperation: "REPAIR_CONTRADICTING_EVIDENCE", BlockedBy: []string{strings.ToLower(spec.Name) + "-contradiction"}}
+}
+
+func makeEdge(meta Meta, report Report, caseID, activity string, fromClaim, toClaim Claim, toOpenID string) (DescentEdge, error) {
 	binding, ok := meta.Bindings[activity]
 	if !ok {
 		return DescentEdge{}, errors.New("missing edge activity")
 	}
-	edgeID := "edge/" + caseID + "/" + strings.ToLower(from) + "-to-" + strings.ToLower(to)
-	receiptID := "receipt/" + caseID + "/" + strings.ToLower(from) + "-to-" + strings.ToLower(to)
+	edgeID := "edge/" + caseID + "/" + strings.ToLower(fromClaim.Resolution) + "-to-" + strings.ToLower(toClaim.Resolution)
+	receiptID := "receipt/" + caseID + "/" + strings.ToLower(fromClaim.Resolution) + "-to-" + strings.ToLower(toClaim.Resolution)
 	receipt := GeneratedReceipt{
-		Schema:            "gooo/resolution-lattice/receipt/v1",
+		Schema:            "gooo/resolution-lattice/receipt/v2",
 		ID:                receiptID,
 		EdgeID:            edgeID,
 		CaseID:            caseID,
 		Activity:          activity,
-		From:              from,
-		To:                to,
+		From:              fromClaim.Resolution,
+		To:                toClaim.Resolution,
+		Stage:             fromClaim.Stage,
+		Step:              fromClaim.Step,
+		Reason:            fromClaim.Reason,
+		UnknownClass:      fromClaim.UnknownClass,
+		NextOperation:     fromClaim.NextOperation,
+		BlockedBy:         append([]string(nil), fromClaim.BlockedBy...),
 		InputDigest:       report.InputDigest,
 		ToolDigest:        report.ToolDigest,
 		ContractDigest:    report.ContractDigest,
 		SourceDigest:      meta.SourceDigest,
-		OutputClaimDigest: DigestJSON(output),
+		OutputClaimDigest: DigestJSON(toClaim),
 	}
+	fromOpenID := eventID(caseID, fromClaim.Resolution, LifecycleOpen)
 	return DescentEdge{
 		ID:                edgeID,
-		From:              from,
-		To:                to,
+		From:              fromClaim.Resolution,
+		To:                toClaim.Resolution,
 		Activity:          activity,
 		SourcePath:        binding.SourcePath,
 		SourceDigest:      meta.SourceDigest,
@@ -296,33 +368,59 @@ func makeEdge(meta Meta, report Report, caseID, from, to, fromOpen, toOpen strin
 		GeneratedArtifact: "receipts.json",
 		Evaluator:         binding.Evaluator,
 		Receipt:           receipt,
-		CausalFrontier:    []string{fromOpen, toOpen},
+		CausalFrontier:    []string{fromOpenID, toOpenID},
 	}, nil
 }
 
 func evaluateImprovement(input Input, caseID string) ImprovementResult {
-	claim := Claim{
+	unknown := Claim{
 		ID:            caseID + ":improvement",
-		Resolution:    "EXACT",
+		Resolution:    "FIELD",
 		State:         StateUnknown,
 		Stage:         "IMPROVEMENT",
 		Step:          "REQUIRE_EXACT_BEFORE_AFTER_PAIR",
 		Reason:        "EXACT_BEFORE_AFTER_PAIR_MISSING",
-		UnknownClass:  "CAUSALITY_UNPROVEN",
+		UnknownClass:  UnknownCausality,
 		NextOperation: "PROVIDE_EXACT_BEFORE_AFTER_PAIR",
 		BlockedBy:     []string{"exact-before-after-pair"},
 	}
-	if input.Improvement == nil {
-		return ImprovementResult{Claim: claim}
+	metrics := []ImprovementMetric{
+		{Name: "unidentified_cause_frontier_count", State: StateUnknown, ExactPair: false},
+		{Name: "minimum_cause_reach_stage_count", State: StateUnknown, ExactPair: false},
+	}
+	if input.Improvement == nil || input.Improvement.ExactBefore == nil || input.Improvement.ExactAfter == nil {
+		return ImprovementResult{Claim: unknown, Metrics: metrics}
 	}
 	comparison := input.Improvement
-	pair := comparison.ExactBefore != nil && comparison.ExactAfter != nil
-	sameInput := comparison.InputDigest != ""
-	sameTool := comparison.ToolDigest != ""
-	sameContract := comparison.ContractDigest != ""
-	if !pair || !sameInput || !sameTool || !sameContract {
-		return ImprovementResult{Claim: claim, PairPresent: pair, SameInputDigest: sameInput, SameToolDigest: sameTool, SameContractDigest: sameContract}
+	pair := comparison.ExactBefore.Digest != "" && comparison.ExactAfter.Digest != "" && comparison.ExactBefore.Value != "" && comparison.ExactAfter.Value != ""
+	sameFixture := sameIdentity(comparison.FixtureDigest, comparison.ExactBefore.FixtureDigest, comparison.ExactAfter.FixtureDigest)
+	sameInput := sameIdentity(comparison.InputDigest, comparison.ExactBefore.InputDigest, comparison.ExactAfter.InputDigest)
+	sameTool := sameIdentity(comparison.ToolDigest, comparison.ExactBefore.ToolDigest, comparison.ExactAfter.ToolDigest)
+	sameContract := sameIdentity(comparison.ContractDigest, comparison.ExactBefore.ContractDigest, comparison.ExactAfter.ContractDigest)
+	result := ImprovementResult{Claim: unknown, PairPresent: pair, SameFixtureDigest: sameFixture, SameInputDigest: sameInput, SameToolDigest: sameTool, SameContractDigest: sameContract, Metrics: metrics}
+	if !pair || !sameFixture || !sameInput || !sameTool || !sameContract {
+		result.Claim.Reason = "EXACT_BEFORE_AFTER_DIGEST_MISMATCH"
+		result.Claim.NextOperation = "PROVIDE_MATCHING_EXACT_BEFORE_AFTER_PAIR"
+		result.Claim.BlockedBy = []string{"fixture-and-digests"}
+		return result
 	}
+	beforeFrontier := comparison.ExactBefore.UnidentifiedCauseFrontierCount
+	afterFrontier := comparison.ExactAfter.UnidentifiedCauseFrontierCount
+	beforeStages := comparison.ExactBefore.MinimumCauseReachStageCount
+	afterStages := comparison.ExactAfter.MinimumCauseReachStageCount
+	if beforeStages == nil {
+		beforeStages = comparison.ExactBefore.MinimumCauseReachStages
+	}
+	if afterStages == nil {
+		afterStages = comparison.ExactAfter.MinimumCauseReachStages
+	}
+	if beforeFrontier == nil || afterFrontier == nil || beforeStages == nil || afterStages == nil {
+		result.Claim.Reason = "EXACT_BEFORE_AFTER_METRICS_MISSING"
+		result.Claim.NextOperation = "PROVIDE_EXACT_CAUSE_FRONTIER_METRICS"
+		result.Claim.BlockedBy = []string{"exact-cause-frontier-metrics"}
+		return result
+	}
+	claim := unknown
 	claim.State = StateClosed
 	claim.Stage = "NONE"
 	claim.Step = "NONE"
@@ -330,15 +428,21 @@ func evaluateImprovement(input Input, caseID string) ImprovementResult {
 	claim.UnknownClass = "NONE"
 	claim.NextOperation = "NONE"
 	claim.BlockedBy = []string{}
-	if !comparison.UtilityEvidence {
-		claim.State = StateRefuted
-		claim.Stage = "IMPROVEMENT"
-		claim.Step = "EVALUATE_UTILITY_EVIDENCE"
-		claim.Reason = "EXACT_PAIR_NOT_UTILITY"
-		claim.NextOperation = "REVIEW_UTILITY_EVIDENCE"
-		claim.BlockedBy = []string{"utility-evidence"}
+	frontierDelta := *afterFrontier - *beforeFrontier
+	stageDelta := *afterStages - *beforeStages
+	result.Claim = claim
+	result.Metrics = []ImprovementMetric{
+		{Name: "unidentified_cause_frontier_count", State: StateClosed, Before: beforeFrontier, After: afterFrontier, Delta: &frontierDelta, ExactPair: true},
+		{Name: "minimum_cause_reach_stage_count", State: StateClosed, Before: beforeStages, After: afterStages, Delta: &stageDelta, ExactPair: true},
 	}
-	return ImprovementResult{Claim: claim, PairPresent: true, SameInputDigest: true, SameToolDigest: true, SameContractDigest: true}
+	return result
+}
+
+func sameIdentity(topLevel, before, after string) bool {
+	if before != "" || after != "" {
+		return before != "" && before == after
+	}
+	return topLevel != ""
 }
 
 func precedence(refuted, unknown bool) string {
@@ -354,11 +458,11 @@ func precedence(refuted, unknown bool) string {
 func decisionFor(state string) string {
 	switch state {
 	case StateClosed:
-		return "RESOLUTION_LATTICE_CLOSED"
+		return DecisionClosed
 	case StateUnknown:
-		return "RESOLUTION_LATTICE_UNKNOWN"
+		return DecisionUnknown
 	default:
-		return "FAIL_CLOSED"
+		return DecisionFailClosed
 	}
 }
 
@@ -371,6 +475,37 @@ func bindingActivity(meta Meta, activity string) string {
 		return activity
 	}
 	return activity
+}
+
+func normalizeFrontier(values []string) []string {
+	seen := map[string]bool{}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func validUnknownClass(value string) bool {
+	for _, class := range UnknownClasses {
+		if value == class {
+			return true
+		}
+	}
+	return false
+}
+
+func setMinimalDependencyFrontier(existing []string, values ...string) []string {
+	if len(existing) != 0 {
+		return existing
+	}
+	return normalizeFrontier(values)
 }
 
 func DigestJSON(value any) string {

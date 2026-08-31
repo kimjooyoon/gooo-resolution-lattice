@@ -1,20 +1,23 @@
 {
-  "schema": "gooo/resolution-lattice/input/v1",
+  "schema": "gooo/resolution-lattice/input/v2",
   "case_id": "unknown",
   "subject": "claim://order/unknown",
-  "start_resolution": "EXACT",
+  "start_resolution": "PROJECT",
   "evidence": {
-    "EXACT": {"status": "MISSING", "observed": "", "digest": ""},
-    "INVARIANT": {"status": "SUPPORTS", "observed": "orders have receipts", "digest": "invariant-order-receipt"},
-    "EXISTENCE": {"status": "SUPPORTS", "observed": "receipt class exists", "digest": "existence-receipt-class"}
+    "PROJECT": {"status": "MISSING", "observed": "", "digest": ""},
+    "ARTIFACT": {"status": "SUPPORTS", "observed": "artifact-class exists", "digest": "artifact-order"},
+    "ACTIVITY": {"status": "SUPPORTS", "observed": "activity exists", "digest": "activity-order"},
+    "PREDICATE": {"status": "SUPPORTS", "observed": "predicate exists", "digest": "predicate-order"},
+    "FIELD": {"status": "SUPPORTS", "observed": "field exists", "digest": "field-order"}
   },
   "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 0, "requested_privilege_escalation": false},
   "improvement": {
+    "fixture_digest": "fixture-resolution-v2",
     "input_digest": "input-order-unknown",
-    "tool_digest": "tool-resolution-lattice-v1",
+    "tool_digest": "tool-resolution-lattice-v2",
     "contract_digest": "contract-resolution-lattice-v1",
-    "exact_before": {"value": "latency=100", "digest": "before-exact"},
-    "exact_after": null,
+    "exact_before": {"value": "before", "digest": "before-exact", "unidentified_cause_frontier_count": 4, "minimum_cause_reach_stage_count": 5},
+    "exact_after": {"value": "after", "digest": "after-exact", "unidentified_cause_frontier_count": 4, "minimum_cause_reach_stage_count": 5},
     "utility_evidence": true
   }
 }

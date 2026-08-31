@@ -1,12 +1,14 @@
 {
-  "schema": "gooo/resolution-lattice/input/v1",
+  "schema": "gooo/resolution-lattice/input/v2",
   "case_id": "refuted",
   "subject": "claim://order/13",
-  "start_resolution": "EXACT",
+  "start_resolution": "PROJECT",
   "evidence": {
-    "EXACT": {"status": "CONTRADICTS", "observed": "order-13=cancelled", "digest": "exact-order-13-cancelled"},
-    "INVARIANT": {"status": "SUPPORTS", "observed": "paid orders have receipt", "digest": "invariant-paid-receipt"},
-    "EXISTENCE": {"status": "SUPPORTS", "observed": "receipt-13 exists", "digest": "existence-receipt-13"}
+    "PROJECT": {"status": "CONTRADICTS", "observed": "project-13=refuted", "digest": "project-order-13-refuted"},
+    "ARTIFACT": {"status": "SUPPORTS", "observed": "artifact exists", "digest": "artifact-order-13"},
+    "ACTIVITY": {"status": "SUPPORTS", "observed": "activity exists", "digest": "activity-order-13"},
+    "PREDICATE": {"status": "SUPPORTS", "observed": "predicate exists", "digest": "predicate-order-13"},
+    "FIELD": {"status": "SUPPORTS", "observed": "field exists", "digest": "field-order-13"}
   },
   "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 0, "requested_privilege_escalation": false}
 }

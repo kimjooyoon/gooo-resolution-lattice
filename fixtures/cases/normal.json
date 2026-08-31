@@ -1,20 +1,24 @@
 {
-  "schema": "gooo/resolution-lattice/input/v1",
+  "schema": "gooo/resolution-lattice/input/v2",
   "case_id": "normal",
   "subject": "claim://order/42",
-  "start_resolution": "EXACT",
+  "start_resolution": "PROJECT",
+  "decision": "FIXED_POINT",
   "evidence": {
-    "EXACT": {"status": "SUPPORTS", "observed": "order-42=paid", "digest": "exact-order-42-paid"},
-    "INVARIANT": {"status": "SUPPORTS", "observed": "paid orders have receipt", "digest": "invariant-paid-receipt"},
-    "EXISTENCE": {"status": "SUPPORTS", "observed": "receipt-42 exists", "digest": "existence-receipt-42"}
+    "PROJECT": {"status": "SUPPORTS", "observed": "project-42=valid", "digest": "project-order-42"},
+    "ARTIFACT": {"status": "SUPPORTS", "observed": "artifact-42=valid", "digest": "artifact-order-42"},
+    "ACTIVITY": {"status": "SUPPORTS", "observed": "activity-42=valid", "digest": "activity-order-42"},
+    "PREDICATE": {"status": "SUPPORTS", "observed": "predicate-42=valid", "digest": "predicate-order-42"},
+    "FIELD": {"status": "SUPPORTS", "observed": "field-42=valid", "digest": "field-order-42"}
   },
   "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 0, "requested_privilege_escalation": false},
   "improvement": {
+    "fixture_digest": "fixture-resolution-v2",
     "input_digest": "input-order-42",
-    "tool_digest": "tool-resolution-lattice-v1",
+    "tool_digest": "tool-resolution-lattice-v2",
     "contract_digest": "contract-resolution-lattice-v1",
-    "exact_before": {"value": "latency=100", "digest": "before-exact"},
-    "exact_after": {"value": "latency=80", "digest": "after-exact"},
+    "exact_before": {"value": "before", "digest": "before-exact", "unidentified_cause_frontier_count": 4, "minimum_cause_reach_stage_count": 5},
+    "exact_after": {"value": "after", "digest": "after-exact", "unidentified_cause_frontier_count": 2, "minimum_cause_reach_stage_count": 3},
     "utility_evidence": true
   }
 }
