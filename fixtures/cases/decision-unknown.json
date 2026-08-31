@@ -1,0 +1,24 @@
+{
+  "schema": "gooo/resolution-lattice/input/v2",
+  "case_id": "decision-unknown",
+  "subject": "claim://decision/unknown",
+  "start_resolution": "PROJECT",
+  "decision": "UNRECOGNIZED_DECISION",
+  "evidence": {
+    "PROJECT": {"status": "SUPPORTS", "observed": "project valid", "digest": "decision-project"},
+    "ARTIFACT": {"status": "SUPPORTS", "observed": "artifact valid", "digest": "decision-artifact"},
+    "ACTIVITY": {"status": "SUPPORTS", "observed": "activity valid", "digest": "decision-activity"},
+    "PREDICATE": {"status": "SUPPORTS", "observed": "predicate valid", "digest": "decision-predicate"},
+    "FIELD": {"status": "SUPPORTS", "observed": "field valid", "digest": "decision-field"}
+  },
+  "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 0, "requested_privilege_escalation": false},
+  "improvement": {
+    "fixture_digest": "fixture-resolution-v2",
+    "input_digest": "input-decision-unknown",
+    "tool_digest": "tool-resolution-lattice-v2",
+    "contract_digest": "contract-resolution-lattice-v1",
+    "exact_before": {"value": "before", "digest": "before-decision", "unidentified_cause_frontier_count": 2, "minimum_cause_reach_stage_count": 5},
+    "exact_after": {"value": "after", "digest": "after-decision", "unidentified_cause_frontier_count": 2, "minimum_cause_reach_stage_count": 5},
+    "utility_evidence": true
+  }
+}

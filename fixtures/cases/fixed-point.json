@@ -1,12 +1,14 @@
 {
-  "schema": "gooo/resolution-lattice/input/v1",
+  "schema": "gooo/resolution-lattice/input/v2",
   "case_id": "fixed-point",
   "subject": "claim://fixed-point/1",
   "start_resolution": "FIXED_POINT",
   "evidence": {
-    "EXACT": {"status": "SUPPORTS", "observed": "arbitrary top", "digest": "fixed-point"},
-    "INVARIANT": {"status": "SUPPORTS", "observed": "arbitrary invariant", "digest": "fixed-point"},
-    "EXISTENCE": {"status": "SUPPORTS", "observed": "arbitrary existence", "digest": "fixed-point"}
+    "PROJECT": {"status": "SUPPORTS", "observed": "arbitrary top", "digest": "fixed-point"},
+    "ARTIFACT": {"status": "SUPPORTS", "observed": "artifact", "digest": "fixed-point"},
+    "ACTIVITY": {"status": "SUPPORTS", "observed": "activity", "digest": "fixed-point"},
+    "PREDICATE": {"status": "SUPPORTS", "observed": "predicate", "digest": "fixed-point"},
+    "FIELD": {"status": "SUPPORTS", "observed": "field", "digest": "fixed-point"}
   },
   "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 0, "requested_privilege_escalation": false}
 }

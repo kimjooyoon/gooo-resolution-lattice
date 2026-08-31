@@ -42,16 +42,21 @@ jobs:
           test -z "$gofmt_files"
           go vet ./...
           test_start=$(date +%s%N)
-          go test -json ./... > "$RUNNER_TEMP/go-test.json"
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/test-peak-rss" go test -count=1 -json ./... > "$RUNNER_TEMP/go-test.json"
           test_end=$(date +%s%N)
-          go_test_cases=$(jq -s '[.[] | select(.Action == "pass" and .Test != null)] | length' "$RUNNER_TEMP/go-test.json")
-          test "$go_test_cases" -ge 1
+          go_test_total=$(jq -s '[.[] | select(.Action == "run" and .Test != null)] | length' "$RUNNER_TEMP/go-test.json")
+          go_test_skipped=$(jq -s '[.[] | select(.Action == "skip" and .Test != null)] | length' "$RUNNER_TEMP/go-test.json")
+          go_test_executed=$((go_test_total - go_test_skipped))
+          test "$go_test_total" -ge 1
+          test "$go_test_executed" -ge 1
           build_start=$(date +%s%N)
-          go build -trimpath -o "$RUNNER_TEMP/gooo-lattice" ./cmd/gooo-lattice
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/build-peak-rss" go build -trimpath -o "$RUNNER_TEMP/gooo-lattice" ./cmd/gooo-lattice
           build_end=$(date +%s%N)
           after=$(git status --porcelain=v1 -z --untracked-files=all | sha256sum | awk '{print $1}')
           test "$before" = "$after"
-          echo "$go_test_cases" > "$RUNNER_TEMP/go-test-cases"
+          echo "$go_test_total" > "$RUNNER_TEMP/go-test-total"
+          echo "$go_test_executed" > "$RUNNER_TEMP/go-test-executed"
+          echo "$go_test_skipped" > "$RUNNER_TEMP/go-test-skipped"
           echo "$(( (test_end - test_start) / 1000000 ))" > "$RUNNER_TEMP/test-wall-ms"
           echo "$(( (build_end - build_start) / 1000000 ))" > "$RUNNER_TEMP/build-wall-ms"
 
@@ -63,34 +68,34 @@ jobs:
           source="examples/resolution-lattice/main.gooo"
           denominator="contracts/resolution-lattice-denominator-v1.json"
           mkdir -p "$artifact/cases" "$artifact/receipts"
-          "$RUNNER_TEMP/gooo-lattice" compile --source "$source" --contract "$denominator" --output "$artifact/semantic-ir.json" > "$RUNNER_TEMP/semantic-ir.stdout.json"
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/compile-peak-rss" \
+            "$RUNNER_TEMP/gooo-lattice" compile --source "$source" --contract "$denominator" --output "$artifact/semantic-ir.json" > "$RUNNER_TEMP/semantic-ir.stdout.json"
           before=$(git status --porcelain=v1 -z --untracked-files=all | sha256sum | awk '{print $1}')
           start=$(date +%s%N)
-          : > "$RUNNER_TEMP/peak-rss"
-          for case_id in normal unknown refuted fixed-point privilege-escalation malformed improvement-unknown; do
+          : > "$RUNNER_TEMP/conformance-peak-rss"
+          for case_id in normal unknown dependency-blocked decision-unknown refuted contradiction fixed-point privilege-escalation malformed improvement-unknown; do
             output="$RUNNER_TEMP/lattice-output-$case_id"
             mkdir -p "$output"
-            if test "$case_id" = "normal"; then
-              /usr/bin/time -f '%M' -o "$RUNNER_TEMP/peak-rss" \
-                "$RUNNER_TEMP/gooo-lattice" resolve \
-                --input "fixtures/cases/$case_id.json" --output-dir "$output" \
-                --source "$source" --contract "$denominator" --ir "$artifact/semantic-ir.json" \
-                > "$RUNNER_TEMP/$case_id.stdout"
-            else
+            /usr/bin/time -f '%M' -o "$RUNNER_TEMP/peak-$case_id" \
               "$RUNNER_TEMP/gooo-lattice" resolve \
-                --input "fixtures/cases/$case_id.json" --output-dir "$output" \
-                --source "$source" --contract "$denominator" --ir "$artifact/semantic-ir.json" \
-                > "$RUNNER_TEMP/$case_id.stdout"
-            fi
+              --input "fixtures/cases/$case_id.json" --output-dir "$output" \
+              --source "$source" --contract "$denominator" --ir "$artifact/semantic-ir.json" \
+              > "$RUNNER_TEMP/$case_id.stdout"
+            cat "$RUNNER_TEMP/peak-$case_id" >> "$RUNNER_TEMP/conformance-peak-rss"
             cp "$output/report.json" "$artifact/cases/$case_id.json"
             cp "$output/receipts.json" "$artifact/receipts/$case_id.json"
           done
           end=$(date +%s%N)
           after=$(git status --porcelain=v1 -z --untracked-files=all | sha256sum | awk '{print $1}')
           test "$before" = "$after"
-          test -s "$RUNNER_TEMP/peak-rss"
+          test -s "$RUNNER_TEMP/conformance-peak-rss"
           echo "$(( (end - start) / 1000000 ))" > "$RUNNER_TEMP/conformance-wall-ms"
-          echo "$(cat "$RUNNER_TEMP/peak-rss")" > "$RUNNER_TEMP/peak-rss-kib"
+          sort -nr "$RUNNER_TEMP/conformance-peak-rss" | head -1 > "$RUNNER_TEMP/conformance-peak-rss-kib"
+          conformance_peak_rss=$(cat "$RUNNER_TEMP/conformance-peak-rss-kib")
+          build_peak_rss=$(cat "$RUNNER_TEMP/build-peak-rss")
+          test_peak_rss=$(cat "$RUNNER_TEMP/test-peak-rss")
+          compile_peak_rss=$(cat "$RUNNER_TEMP/compile-peak-rss")
+          peak_rss=$(printf '%s\n' "$build_peak_rss" "$test_peak_rss" "$compile_peak_rss" "$conformance_peak_rss" | sort -nr | head -1)
           gooo_source_digest="sha256:$(sha256sum "$source" | awk '{print $1}')"
           contract_digest="sha256:$(sha256sum "$denominator" | awk '{print $1}')"
           jq -S -n \
@@ -100,14 +105,20 @@ jobs:
             --argjson build_wall_ms "$(cat "$RUNNER_TEMP/build-wall-ms")" \
             --argjson test_wall_ms "$(cat "$RUNNER_TEMP/test-wall-ms")" \
             --argjson conformance_wall_ms "$(cat "$RUNNER_TEMP/conformance-wall-ms")" \
-            --argjson peak_rss_kib "$(cat "$RUNNER_TEMP/peak-rss-kib")" \
-            --argjson go_test_cases "$(cat "$RUNNER_TEMP/go-test-cases")" \
+            --argjson peak_rss_kib "$peak_rss" \
+            --argjson build_peak_rss_kib "$build_peak_rss" \
+            --argjson test_peak_rss_kib "$test_peak_rss" \
+            --argjson conformance_peak_rss_kib "$conformance_peak_rss" \
+            --argjson go_test_total "$(cat "$RUNNER_TEMP/go-test-total")" \
+            --argjson go_test_executed "$(cat "$RUNNER_TEMP/go-test-executed")" \
+            --argjson go_test_skipped "$(cat "$RUNNER_TEMP/go-test-skipped")" \
             '{schema:"gooo/resolution-lattice/runtime/v1",go_version:$go_version,
               source_digest:$source_digest,contract_digest:$contract_digest,
               build_wall_ms:$build_wall_ms,test_wall_ms:$test_wall_ms,
               conformance_wall_ms:$conformance_wall_ms,peak_rss_kib:$peak_rss_kib,
+              peak_rss_kib_by_phase:{build:$build_peak_rss_kib,test:$test_peak_rss_kib,conformance:$conformance_peak_rss_kib},
               repository_writes:0,local_tests_run:0,
-              test_counts:{executed:$go_test_cases,reused:0,skipped:0}}' \
+              test_counts:{total:$go_test_total,executed:$go_test_executed,reused:0,skipped:$go_test_skipped,not_observed:0}}' \
             > "$artifact/runtime.json"
 
       - name: Evaluate fixed denominator and publish human artifact
@@ -121,18 +132,20 @@ jobs:
             "$artifact/semantic-ir.json" \
             contracts/resolution-lattice-denominator-v1.json \
             "$artifact/runtime.json" \
-            "$(cat "$RUNNER_TEMP/go-test-cases")" \
+            "$(cat "$RUNNER_TEMP/go-test-total")" \
             "$SUBJECT_SHA" \
             "$artifact/ci-report.json" \
             "$artifact/ci-report.md"
           jq -e '
             .decision == "RESOLUTION_LATTICE_CONFORMANCE_CLOSED" and
-            .summary.numerator == 12 and .summary.denominator == 12 and
-            .case_summary.numerator == 7 and .case_summary.denominator == 7 and
+            .summary.closed_cells == 12 and .summary.fixed_denominator == 12 and
+            .case_summary.total == 10 and
             .inventory.root_readme_excluded == true and
             .inventory.physical_lines_include_blank_and_comments == true and
             .artifacts.repository_writes == 0 and .tests.local_tests_run == 0 and
-            ([.metrics[] | select(.numerator == 1 and .denominator == 1)] | length) == 12 and
+            .runtime.test_counts.total >= 1 and .runtime.test_counts.executed >= 1 and
+            .runtime.test_counts.reused == 0 and .runtime.test_counts.not_observed == 0 and
+            ([.metrics[] | select(.state == "CLOSED")] | length) == 12 and
             (all(.metrics[]; .activity != null and .source_digest != null and .ir_node != null and .generated_artifact != null and .evaluator != null))
           ' "$artifact/ci-report.json" >/dev/null
           cat "$artifact/ci-report.md" >> "$GITHUB_STEP_SUMMARY"

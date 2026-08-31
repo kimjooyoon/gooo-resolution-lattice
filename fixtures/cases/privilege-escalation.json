@@ -1,12 +1,14 @@
 {
-  "schema": "gooo/resolution-lattice/input/v1",
+  "schema": "gooo/resolution-lattice/input/v2",
   "case_id": "privilege-escalation",
   "subject": "claim://authority/1",
-  "start_resolution": "EXACT",
+  "start_resolution": "PROJECT",
   "evidence": {
-    "EXACT": {"status": "SUPPORTS", "observed": "authority request", "digest": "authority"},
-    "INVARIANT": {"status": "SUPPORTS", "observed": "authority invariant", "digest": "authority"},
-    "EXISTENCE": {"status": "SUPPORTS", "observed": "authority exists", "digest": "authority"}
+    "PROJECT": {"status": "SUPPORTS", "observed": "authority request", "digest": "authority"},
+    "ARTIFACT": {"status": "SUPPORTS", "observed": "authority artifact", "digest": "authority"},
+    "ACTIVITY": {"status": "SUPPORTS", "observed": "authority activity", "digest": "authority"},
+    "PREDICATE": {"status": "SUPPORTS", "observed": "authority predicate", "digest": "authority"},
+    "FIELD": {"status": "SUPPORTS", "observed": "authority field", "digest": "authority"}
   },
   "authority": {"observation_mode": "READ_ONLY", "requested_repository_writes": 1, "requested_privilege_escalation": true}
 }

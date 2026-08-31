@@ -25,6 +25,16 @@ func LoadDenominator(path string) (Denominator, error) {
 	if denominator.Total != len(denominator.Cells) || denominator.Total != 12 {
 		return Denominator{}, errors.New("denominator total is not fixed at 12")
 	}
+	if len(denominator.Proofs) != 3 || len(denominator.IndicatorClasses) != 3 {
+		return Denominator{}, errors.New("denominator balance dimensions changed")
+	}
+	seen := make(map[string]bool, len(denominator.Cells))
+	for _, cell := range denominator.Cells {
+		if cell.Ordinal < 1 || cell.Ordinal > denominator.Total || cell.ID == "" || cell.Activity == "" || seen[cell.Activity] {
+			return Denominator{}, errors.New("denominator contains an invalid or duplicate activity")
+		}
+		seen[cell.Activity] = true
+	}
 	return denominator, nil
 }
 
@@ -52,6 +62,9 @@ func CompileSource(sourcePath string, source []byte, denominator Denominator) (S
 			MetricID:   cell.MetricID,
 			Artifact:   cell.Artifact,
 			Evaluator:  cell.Evaluator,
+			Resolution: cell.Resolution,
+			From:       cell.From,
+			To:         cell.To,
 		})
 	}
 	for _, cell := range denominator.Cells {
@@ -60,10 +73,11 @@ func CompileSource(sourcePath string, source []byte, denominator Denominator) (S
 		}
 	}
 	return SemanticIR{
-		Schema:       IRSchema,
-		SourcePath:   sourcePath,
-		SourceDigest: Digest(source),
-		Nodes:        nodes,
+		Schema:           IRSchema,
+		SourcePath:       sourcePath,
+		SourceDigest:     Digest(source),
+		ResolutionLadder: append([]string(nil), ResolutionLevels...),
+		Nodes:            nodes,
 	}, nil
 }
 
@@ -96,7 +110,7 @@ func LoadMeta(sourcePath, contractPath, irPath string) (Meta, error) {
 		return Meta{}, err
 	}
 	sourceDigest := Digest(source)
-	if ir.SourceDigest != sourceDigest || len(ir.Nodes) != 12 {
+	if ir.SourceDigest != sourceDigest || len(ir.Nodes) != 12 || !sameStrings(ir.ResolutionLadder, ResolutionLevels) {
 		return Meta{}, errors.New("semantic IR is not bound to the current Gooo source")
 	}
 	return Meta{
@@ -118,9 +132,24 @@ func BindingsFromIR(ir SemanticIR) map[string]Binding {
 			MetricID:   node.MetricID,
 			Artifact:   node.Artifact,
 			Evaluator:  node.Evaluator,
+			Resolution: node.Resolution,
+			From:       node.From,
+			To:         node.To,
 		}
 	}
 	return bindings
+}
+
+func sameStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func Digest(data []byte) string {

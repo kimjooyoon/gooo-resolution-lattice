@@ -26,7 +26,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "resolve":
 		return resolve(args[1:], stdout, stderr)
 	case "version":
-		fmt.Fprintln(stdout, "gooo-lattice/v1")
+		fmt.Fprintln(stdout, "gooo-lattice/v2")
 		return 0
 	default:
 		usage(stderr)
@@ -117,7 +117,7 @@ func resolve(args []string, stdout, stderr io.Writer) int {
 		CaseID   string                     `json:"case_id"`
 		Receipts []lattice.GeneratedReceipt `json:"receipts"`
 	}{
-		Schema:   "gooo/resolution-lattice/receipts/v1",
+		Schema:   "gooo/resolution-lattice/receipts/v2",
 		CaseID:   report.CaseID,
 		Receipts: receipts,
 	}
